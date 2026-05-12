@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class SimulationConfig:
+    """Central tuning knobs for the sandbox. Loaded once at startup."""
+
+    world_width: float = 1000.0
+    world_height: float = 1000.0
+
+    # Simulation timing
+    dt: float = 1.0 / 60.0
+    fixed_substeps: int = 1
+
+    # Vessel (passive: holds station with optional micro-drift)
+    vessel_max_speed: float = 30.0
+    vessel_sensor_radius: float = 130.0
+    vessel_station_keeping_noise: float = 0.001  # tiny velocity jitter for realism
+
+    # Targets
+    num_targets: int = 2
+    target_speed_min: float = 30.0
+    target_speed_max: float = 50.0
+    target_radius: float = 5.0 #
+
+    # Occlusion / sensor loss (probabilistic drop-out when otherwise visible)
+    occlusion_dropout_per_s: float = 0.001 #zero for now
+    occlusion_min_hidden_s: float = 0.35
+    occlusion_max_hidden_s: float = 1.8
+
+    # Sensor noise (std dev in meters, applied in boat frame then mapped to world)
+    observation_position_noise_std: float = 0.0 #zero for now
+
+    # Tracking filter
+    track_alpha_pos: float = 0.45
+    track_beta_vel: float = 0.08
+    track_confidence_gain_on_hit: float = 0.22
+    track_confidence_decay_per_s: float = 0.35
+    track_prune_after_s: float = 5.0
+
+    # Metrics
+    track_maintained_conf_threshold: float = 0.45
+    reacquisition_gap_s: float = 1.2  # no obs above this counts as "lost" for metric
+
+    # Obstacles (center x, y, radius)
+    default_obstacles: tuple[tuple[float, float, float], ...] = field(
+        default_factory=lambda: (
+            (180.0, 420.0, 45.0),
+            (520.0, 160.0, 55.0),
+            (720.0, 380.0, 38.0),
+        )
+    )
