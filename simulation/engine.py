@@ -7,6 +7,7 @@ from typing import Deque, Dict, List
 from simulation.metrics import TrackingMetrics
 from simulation.world import WorldState
 from tracking.observation import Observation
+from utils.obstacle_avoidance import resolve_penetrations
 from utils.vec2 import Vec2
 
 
@@ -39,11 +40,17 @@ class SimulationEngine:
         w.sim_time += dt
 
         ctx = w.mission_context()
-        w.vessel.step(dt, ctx, cfg.vessel_station_keeping_noise)
+        w.vessel.step(dt, ctx, cfg, w.obstacles)
         w.vessel.wrap_or_clamp(cfg.world_width, cfg.world_height)
+        w.vessel.position, w.vessel.velocity = resolve_penetrations(
+            w.vessel.position,
+            w.vessel.velocity,
+            cfg.vessel_collision_radius,
+            w.obstacles,
+        )
 
         for t in w.targets:
-            t.step_physics(dt, w.sim_time, cfg)
+            t.step_physics(dt, w.sim_time, cfg, w.obstacles)
 
         w.tracker.predict(dt, w.sim_time)
 

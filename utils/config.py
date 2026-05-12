@@ -7,8 +7,18 @@ from dataclasses import dataclass, field
 class SimulationConfig:
     """Central tuning knobs for the sandbox. Loaded once at startup."""
 
-    world_width: float = 1000.0
-    world_height: float = 1000.0
+    world_width: float = 900.0
+    world_height: float = 900.0
+
+    # Random waypoint legs (seconds) for vessel + targets
+    nav_grid_margin: float = 28.0
+    nav_leg_duration_min_s: float = 4.0
+    nav_leg_duration_max_s: float = 14.0
+    nav_detour_duration_min_s: float = 1.5
+    nav_detour_duration_max_s: float = 6.5
+    nav_arrival_radius: float = 26.0
+    nav_path_inflate: float = 12.0  # inflate obstacle discs for LOS test to primary goal
+    nav_detour_pad: float = 22.0  # clearance when placing secondary waypoint around a rock
 
     # Simulation timing
     dt: float = 1.0 / 60.0
@@ -18,6 +28,11 @@ class SimulationConfig:
     vessel_max_speed: float = 30.0
     vessel_sensor_radius: float = 130.0
     vessel_station_keeping_noise: float = 0.001  # tiny velocity jitter for realism
+    vessel_collision_radius: float = 9.0  # disk used for obstacle avoidance / resolution
+
+    # Shared obstacle avoidance (kinematic repulsion + penetration resolve)
+    obstacle_avoid_lookahead: float = 10.0
+    obstacle_avoid_repulsion: float = 100.0
 
     # Targets
     num_targets: int = 2
@@ -52,3 +67,10 @@ class SimulationConfig:
             (720.0, 380.0, 38.0),
         )
     )
+
+    num_obstacle_seeds: int = 14
+    min_cluster_size: int = 3
+    max_cluster_size: int = 10
+    obstacle_radius: int = 50
+    size_falloff: float = .8
+

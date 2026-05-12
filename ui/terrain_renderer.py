@@ -1,10 +1,3 @@
-"""
-Procedural rocky terrain / island shading from circular obstacles.
-
-Generates at reduced resolution, then upscales. All heavy work is NumPy
-broadcasting over a low-res grid (no per-pixel Python loops).
-"""
-
 from __future__ import annotations
 
 from typing import Any, Iterable, Sequence, Tuple

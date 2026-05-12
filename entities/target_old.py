@@ -36,7 +36,6 @@ class Target:
         cfg,
         obstacles: tuple[Obstacle, ...],
     ) -> None:
-
         """Advance motion; avoid obstacles; bounce on rectangular bounds."""
         cmd = self.waypoint_nav.desired_velocity(
             self.position,

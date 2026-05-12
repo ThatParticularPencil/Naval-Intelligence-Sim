@@ -3,9 +3,16 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Tuple
 
 from interfaces.autonomy import MissionContext, NavigationPolicy
+from utils.config import SimulationConfig
+from utils.obstacle_avoidance import integrate_with_obstacle_avoidance
+from utils.waypoint_nav import WaypointNav
 from utils.vec2 import Vec2
+
+if TYPE_CHECKING:
+    from entities.obstacle import Obstacle
 
 
 @dataclass
@@ -19,19 +26,40 @@ class Vessel:
     heading_rad: float
     max_speed: float
     sensor_radius: float
+    waypoint_nav: WaypointNav = field(repr=False)
     navigation: NavigationPolicy = field(repr=False)
     _rng: random.Random = field(default_factory=random.Random, repr=False, compare=False)
 
-    def step(self, dt: float, ctx: MissionContext, station_noise: float) -> None:
-        desired = self.navigation.desired_velocity(ctx)
-        # Passive station-keeping: blend tiny noise so heading/speed panels are alive
-        n = Vec2(self._rng.gauss(0.0, 1.0), self._rng.gauss(0.0, 1.0)) * station_noise
+    def step(
+        self,
+        dt: float,
+        ctx: MissionContext,
+        cfg: SimulationConfig,
+        obstacles: Tuple["Obstacle", ...],
+    ) -> None:
+        desired = self.waypoint_nav.desired_velocity(
+            self.position,
+            ctx.sim_time_s,
+            cfg,
+            obstacles,
+            self.max_speed,
+            cfg.vessel_collision_radius,
+        )
+        # Small noise on top of waypoint seek (keeps heading readout from freezing)
+        n = Vec2(self._rng.gauss(0.0, 1.0), self._rng.gauss(0.0, 1.0)) * cfg.vessel_station_keeping_noise
         cmd = desired + n
         speed = cmd.length()
         if speed > self.max_speed and speed > 1e-9:
             cmd = cmd * (self.max_speed / speed)
-        self.velocity = cmd
-        self.position = self.position + self.velocity * dt
+        self.position, self.velocity = integrate_with_obstacle_avoidance(
+            self.position,
+            cmd,
+            cfg.vessel_collision_radius,
+            obstacles,
+            dt,
+            lookahead=cfg.obstacle_avoid_lookahead,
+            repulsion=cfg.obstacle_avoid_repulsion,
+        )
         if self.velocity.length() > 0.05:
             self.heading_rad = math.atan2(self.velocity.y, self.velocity.x)
 

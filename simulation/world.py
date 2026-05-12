@@ -13,6 +13,8 @@ from tracking.sensor_model import SensorModel
 from tracking.tracker import ContactTracker
 from utils.config import SimulationConfig
 from utils.vec2 import Vec2
+from utils.waypoint_nav import WaypointNav
+from .terrain import terrain_gen
 
 
 def _spawn_targets(cfg: SimulationConfig, rng: random.Random) -> List[Target]:
@@ -25,6 +27,9 @@ def _spawn_targets(cfg: SimulationConfig, rng: random.Random) -> List[Target]:
         ang = rng.uniform(0.0, 6.28318)
         v = Vec2(speed * math.cos(ang), speed * math.sin(ang))
         tid = f"T{i+1:02d}"
+        t_nav_rng = random.Random(rng.randint(0, 2**30))
+        t_rng = random.Random(rng.randint(0, 2**30))
+        wn = WaypointNav.bootstrap(t_nav_rng, 0.0, Vec2(x, y), cfg)
         targets.append(
             Target(
                 id=tid,
@@ -33,15 +38,18 @@ def _spawn_targets(cfg: SimulationConfig, rng: random.Random) -> List[Target]:
                 radius=cfg.target_radius,
                 world_w=cfg.world_width,
                 world_h=cfg.world_height,
+                cruise_speed=speed,
+                waypoint_nav=wn,
                 hidden_until=0.0,
-                _rng=random.Random(rng.randint(0, 2**30)),
+                _rng=t_rng,
             )
         )
     return targets
 
 
-def _default_obstacles(cfg: SimulationConfig) -> Tuple[Obstacle, ...]:
-    return tuple(Obstacle(Vec2(cx, cy), r) for cx, cy, r in cfg.default_obstacles)
+def _default_obstacles() -> list[Obstacle]:
+    # return tuple(Obstacle(Vec2(cx, cy), r) for cx, cy, r in cfg.default_obstacles)
+    return terrain_gen()
 
 
 @dataclass
@@ -61,14 +69,17 @@ class WorldState:
     def bootstrap(cls, cfg: SimulationConfig, seed: int | None = 42) -> WorldState:
         rng = random.Random(seed)
         nav = PassiveNavigationPolicy()
+        vr = random.Random(rng.randint(0, 2**30))
+        vstart = Vec2(cfg.world_width * 0.5, cfg.world_height * 0.5)
         vessel = Vessel(
-            position=Vec2(cfg.world_width * 0.5, cfg.world_height * 0.5),
+            position=vstart,
             velocity=Vec2(0.0, 0.0),
             heading_rad=0.0,
             max_speed=cfg.vessel_max_speed,
             sensor_radius=cfg.vessel_sensor_radius,
+            waypoint_nav=WaypointNav.bootstrap(vr, 0.0, vstart, cfg),
             navigation=nav,
-            _rng=random.Random(rng.randint(0, 2**30)),
+            _rng=vr,
         )
         tracker = ContactTracker(
             alpha_pos=cfg.track_alpha_pos,
@@ -82,7 +93,7 @@ class WorldState:
             sim_time=0.0,
             vessel=vessel,
             targets=_spawn_targets(cfg, rng),
-            obstacles=_default_obstacles(cfg),
+            obstacles=tuple(_default_obstacles()),
             tracker=tracker,
             sensor=SensorModel(random.Random(rng.randint(0, 2**30))),
             rng=rng,

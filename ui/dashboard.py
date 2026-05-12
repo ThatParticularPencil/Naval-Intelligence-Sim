@@ -8,7 +8,6 @@ import pygame
 
 from simulation.engine import SimulationEngine
 from ui import colors as C
-from ui.terrain_renderer import TerrainRenderer
 from utils.vec2 import Vec2
 
 
@@ -41,19 +40,6 @@ class Dashboard:
         self._reset_button_rect = pygame.Rect(-100, -100, 1, 1)
         self._reset_button_hover = False
 
-        self._terrain_renderer = TerrainRenderer(
-            self.map_w,
-            self.map_h,
-            cfg.world_width,
-            cfg.world_height,
-            internal_scale=0.25,
-            seed=42,
-        )
-        self._terrain_surface = self._terrain_renderer.render(engine.world.obstacles)
-
-    def _rebuild_terrain(self) -> None:
-        self._terrain_surface = self._terrain_renderer.render(self.engine.world.obstacles)
-
     def run(self, max_fps: float = 60.0) -> None:
         running = True
         while running:
@@ -65,11 +51,9 @@ class Dashboard:
                         running = False
                     elif event.key == pygame.K_r:
                         self.engine.reset()
-                        self._rebuild_terrain()
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if self._reset_button_rect.collidepoint(event.pos):
                         self.engine.reset()
-                        self._rebuild_terrain()
                 elif event.type == pygame.MOUSEMOTION:
                     self._reset_button_hover = self._reset_button_rect.collidepoint(event.pos)
 
@@ -83,11 +67,17 @@ class Dashboard:
         self.screen.fill(C.HUD_BG)
         map_surf = pygame.Surface((self.map_w, self.map_h))
         map_surf.fill(C.BG_OCEAN)
-        map_surf.blit(self._terrain_surface, (0, 0))
         self._draw_grid(map_surf)
         ox, oy = 0.0, 0.0
         sc = self.scale
         w = self.engine.world
+
+        # Obstacles
+        for ob in w.obstacles:
+            cx, cy = _world_to_screen(ob.center, ox, oy, sc)
+            r = int(ob.radius * sc)
+            pygame.draw.circle(map_surf, C.OBSTACLE, (cx, cy), r)
+            # pygame.draw.circle(map_surf, C.OBSTACLE_EDGE, (cx, cy), r, 1)
 
         # Sensor footprint
         bx, by = _world_to_screen(w.vessel.position, ox, oy, sc)
@@ -130,7 +120,7 @@ class Dashboard:
         pygame.draw.line(self.screen, C.GRID, (self.map_w, 0), (self.map_w, self.win_h), 1)
 
     def _draw_grid(self, surf: pygame.Surface) -> None:
-        step = 80
+        step = 30
         for x in range(0, self.map_w, step):
             pygame.draw.line(surf, C.GRID, (x, 0), (x, self.map_h), 1)
         for y in range(0, self.map_h, step):
