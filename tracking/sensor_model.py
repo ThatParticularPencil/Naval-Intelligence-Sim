@@ -7,6 +7,7 @@ from entities.target import Target
 from entities.vessel import Vessel
 from tracking.observation import Observation
 from utils.vec2 import Vec2
+from utils.config import SimulationConfig as cfg
 
 
 class SensorModel:
@@ -30,9 +31,7 @@ class SensorModel:
     ) -> Observation | None:
         rel = target.position - vessel.position
         dist = rel.length()
-        if dist > vessel.sensor_radius + 1e-6:
-            return None
-        if target.is_temporarily_hidden(sim_time):
+        if dist > cfg.vessel_sensor_radius + 1e-6:
             return None
         if not target.clear_line_of_sight(vessel.position, obstacles):
             return None

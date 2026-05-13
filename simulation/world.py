@@ -30,7 +30,7 @@ def _spawn_targets(cfg: SimulationConfig, rng: random.Random) -> List[Target]:
         tid = f"T{i+1:02d}"
         t_rng = random.Random(rng.randint(0, 2**30))
         wp = Waypoint()
-        wp.create_new(cfg)
+        wp.create_new()
         targets.append(
             Target(
                 id=tid,
@@ -73,17 +73,19 @@ class WorldState:
         vr = random.Random(rng.randint(0, 2**30))
         vstart = Vec2(cfg.world_width * 0.5, cfg.world_height * 0.5)
         v_wp = Waypoint()
-        v_wp.create_new(cfg)
+        v_wp.create_new()
         h0 = math.atan2(v_wp.pos.y - vstart.y, v_wp.pos.x - vstart.x)
         vessel = Vessel(
+            id="Vessel_1",
             position=vstart,
-            velocity=Vec2(min(8.0, cfg.vessel_max_speed * 0.25), 0.0).rotate_rad(h0),
-            heading_rad=h0,
-            max_speed=cfg.vessel_max_speed,
-            sensor_radius=cfg.vessel_sensor_radius,
+            velocity=Vec2(min(8.0, cfg.vessel_speed_max * 0.25), 0.0).rotate_rad(h0),
+            heading=h0,
+            radius=cfg.vessel_radius,
+            # sensor_radius=cfg.vessel_sensor_radius,
+            world_w=cfg.world_width,
+            world_h=cfg.world_height,
+            cruise_speed=cfg.vessel_speed_max,
             waypoint=v_wp,
-            navigation=nav,
-            _rng=vr,
         )
         tracker = ContactTracker(
             alpha_pos=cfg.track_alpha_pos,

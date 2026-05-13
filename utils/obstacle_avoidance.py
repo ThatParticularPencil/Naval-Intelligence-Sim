@@ -85,15 +85,38 @@ def avoid(
     dh = 0.0
     
     # Front ray: Proportional braking
-    if hits["front"] <= ray_dist:
-        braking_force = 1.0 - (hits["front"] / cfg.p_accel*ray_dist)
-        dv = -cfg.max_accel * braking_force 
+    if hits["front"] < ray_dist:
+        braking_force = 1.0 - (hits["front"] / ray_dist)
+        dv = -cfg.max_accel * braking_force *.05
 
-    # Side rays: Push heading away from obstacle
-    side = hits["left"] - hits["right"]
-    side_error = hits["right"] if side<0 else hits["left"]
-    
-    steer_weight = side_error / ray_dist
-    dh = steer_weight * cfg.max_turn
+    side_dist: float = 0.0
+    direction: int = 0
+        
+    left_hit  = hits["left"]  < ray_dist
+    right_hit = hits["right"] < ray_dist
+    if left_hit or right_hit:
+        if left_hit and not right_hit:
+            side_dist = hits["left"]
+            direction = 1
+        elif right_hit and not left_hit:
+            side_dist = hits["right"]
+            direction = -1
+        else:
+            # both hit — steer toward whichever side is clearer
+            if hits["front"] <= ray_dist:
+                side_dist = hits["left"]-hits["right"]
+                direction = 1
+            else:
+                if hits["left"] > hits["right"]:
+                    side_dist = hits["left"]
+                    direction = 1
+                else:
+                    side_dist = hits["right"]
+                    direction = -1
+    else:
+        return dv, 0.0
 
-    return dv, dh   
+    steer_weight = 1- (side_dist / ray_dist)
+    dh = steer_weight * cfg.max_turn * direction
+
+    return dv, dh

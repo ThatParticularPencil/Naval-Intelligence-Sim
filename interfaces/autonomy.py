@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Protocol, Sequence
 
 if TYPE_CHECKING:
     from entities.vessel import Vessel
-    from entities.target import Target
+    from entities.target_old import Target
     from tracking.contact_track import ContactTrack
     from utils.vec2 import Vec2
 

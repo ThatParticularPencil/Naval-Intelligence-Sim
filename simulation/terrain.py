@@ -1,7 +1,7 @@
 import random as r
 import math as m
-from entities.obstacle import Obstacle
-from utils.config import SimulationConfig
+from entities import Obstacle
+from utils.config import SimulationConfig as sc
     # num_obstacle_seeds: int = 7
     # min_cluster_size: int = 3
     # max_cluster_size: int = 10
@@ -16,13 +16,10 @@ def noisy_radius(rad:int) -> int:
     return int(r.gauss(rad, 10))
 
 def terrain_gen() -> list[Obstacle]:
-    w = int(SimulationConfig.world_width)
-    h = int(SimulationConfig.world_height)
-    seed_locations: list[Vec2] = [Vec2(r.randint(0, w), r.randint(0, h)) for i in range(SimulationConfig.num_obstacle_seeds)]
-    seeds: list[Obstacle] = [
-        Obstacle(seed_locations[i], noisy_radius(SimulationConfig.obstacle_radius))
-        for i in range(SimulationConfig.num_obstacle_seeds)
-    ]
+    #generating seed locations
+    seed_locations: list[Vec2] = [Vec2(r.randint(0,900), r.randint(0,900)) for i in range(sc.num_obstacle_seeds)]
+    seeds: list[Obstacle] = [Obstacle(seed_locations[i], noisy_radius(sc.obstacle_radius)) for i in range(sc.num_obstacle_seeds)]
+    
     return seeds
     
 

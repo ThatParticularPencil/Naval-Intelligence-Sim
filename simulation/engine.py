@@ -16,7 +16,7 @@ class SimulationEngine:
     """
     Fixed-timestep orchestration: physics, passive navigation, sensing, tracking, metrics.
 
-    Exposes ``last_observations`` for the dashboard (noisy hits this frame).
+    Exposes ``last_observations`` for the dashboard
     """
 
     world: WorldState
@@ -40,17 +40,17 @@ class SimulationEngine:
         w.sim_time += dt
 
         ctx = w.mission_context()
-        w.vessel.step(dt, ctx, cfg, w.obstacles)
-        w.vessel.wrap_or_clamp(cfg.world_width, cfg.world_height)
+        w.vessel.step_physics(dt, cfg, w.obstacles)
+        # w.vessel.wrap_or_clamp(cfg.world_width, cfg.world_height)
         w.vessel.position, w.vessel.velocity = resolve_penetrations(
             w.vessel.position,
             w.vessel.velocity,
-            cfg.vessel_collision_radius,
+            cfg.vessel_radius,
             w.obstacles,
         )
 
         for t in w.targets:
-            t.step_physics(dt, w.sim_time, cfg, w.obstacles)
+            t.step_physics(dt, cfg, w.obstacles)
 
         w.tracker.predict(dt, w.sim_time)
 

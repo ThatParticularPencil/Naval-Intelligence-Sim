@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import math
 import sys
-from typing import List, Tuple
 
 import pygame
 
 from simulation.engine import SimulationEngine
+from utils.config import SimulationConfig as cfg
 from ui import colors as C
 from utils.vec2 import Vec2
 
 
-def _world_to_screen(p: Vec2, ox: float, oy: float, scale: float) -> Tuple[int, int]:
+def _world_to_screen(p: Vec2, ox: float, oy: float, scale: float) -> tuple[int, int]:
     return int(ox + p.x * scale), int(oy + p.y * scale)
 
 
@@ -81,7 +81,7 @@ class Dashboard:
 
         # Sensor footprint
         bx, by = _world_to_screen(w.vessel.position, ox, oy, sc)
-        pygame.draw.circle(map_surf, C.SENSOR_RING, (bx, by), int(w.vessel.sensor_radius * sc), 1)
+        pygame.draw.circle(map_surf, C.SENSOR_RING, (bx, by), int(cfg.vessel_sensor_radius * sc), 1)
 
         # Trails (predicted under true for contrast)
         for tid, trail in self.engine.pred_trails.items():
@@ -113,7 +113,7 @@ class Dashboard:
             pygame.draw.circle(map_surf, C.OBS_NOISY, (mx, my), 3, 1)
 
         # Vessel + heading
-        self._draw_vessel(map_surf, w.vessel.position, w.vessel.heading_rad, ox, oy, sc)
+        self._draw_vessel(map_surf, w.vessel.position, w.vessel.heading, ox, oy, sc)
 
         self.screen.blit(map_surf, (0, 0))
         self._draw_hud()
@@ -162,7 +162,7 @@ class Dashboard:
         y += 16
         y = self._draw_reset_button(x0, y)
 
-        lines: List[str] = [
+        lines: list[str] = [
             f"t_sim: {w.sim_time:8.1f} s",
             f"tracks: {len(w.tracker.tracks)} / targets: {len(w.targets)}",
             "",
@@ -176,7 +176,7 @@ class Dashboard:
             "",
             "--- vessel ---",
             f"speed: {w.vessel.velocity.length():5.2f} m/s",
-            f"sensor R: {w.vessel.sensor_radius:.0f} m",
+            f"sensor R: {cfg.vessel_sensor_radius:.0f} m",
             "",
             "--- tracks ---",
         ]

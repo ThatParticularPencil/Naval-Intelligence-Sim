@@ -5,6 +5,7 @@ import random
 from dataclasses import dataclass, field
 
 from entities.obstacle import Obstacle
+from utils import SimulationConfig
 from utils.obstacle_avoidance import avoid, resolve_penetrations
 from utils.waypoint_nav import Waypoint 
 from utils.vec2 import Vec2
@@ -21,6 +22,8 @@ class Target:
     velocity: Vec2
     heading: float #radians
     radius: float
+    world_w: float
+    world_h: float
     cruise_speed: float # unused for now
     waypoint: Waypoint 
 
@@ -33,7 +36,7 @@ class Target:
 
     def nav_vector(
         self,
-        cfg,
+        cfg: SimulationConfig,
         obstacles: tuple[Obstacle, ...],
     ) -> tuple[float,float]: #vector contains acceleration and change in heading
         """
@@ -50,35 +53,57 @@ class Target:
         
         if avoid_vec == (0,0):
             #turn
-            heading_error: float = m.radians(self.position.angle_to((self.waypoint.pos - self.position))) - self.heading
-            dh: float = cfg.p_turn * heading_error
+            direction = self.waypoint.pos - self.position
+            if direction.length() < 1e-6:
+                desired_heading = self.heading
+            else:
+                desired_heading = m.atan2(direction.y, direction.x)
+            heading_error = desired_heading - self.heading
+            # Normalize to [-pi, pi]
+            while heading_error > m.pi:
+                heading_error -= 2 * m.pi
+            while heading_error < -m.pi:
+                heading_error += 2 * m.pi
+            dh = cfg.p_turn * heading_error
             dh = max(-cfg.max_turn, min(cfg.max_turn, dh))
 
             #accel
-            dv = cfg.max_accel
+            position_error = direction.length()
+            dv = min(cfg.max_accel, position_error/300 * cfg.p_accel)
             return dv,dh
         else:
             return avoid_vec 
 
-def step_physics(
+    def step_physics(
         self,
         dt: float,
-        sim_time: float,
-        cfg,
+        cfg: SimulationConfig,
         obstacles: tuple[Obstacle, ...],
-        max_speed: float,
     ) -> None:
         dv, dh = self.nav_vector(cfg, obstacles)
 
         new_speed = self.velocity.length() + dv
-        new_speed = max(new_speed, max_speed)
+        new_speed = min(max(new_speed,cfg.target_speed_min), cfg.target_speed_max)
         
-        self.velocity = Vec2(new_speed, 0).rotate_rad(self.heading) + (self.velocity * cfg.velocity_decay)
+        self.velocity = Vec2(new_speed, 0).rotate_rad(self.heading)*(1-cfg.velocity_decay) + (self.velocity * cfg.velocity_decay)
         self.position += self.velocity * dt
         self.heading += dh
 
-    def is_temporarily_hidden(self, sim_time: float) -> bool:
-        return sim_time < self.hidden_until
+        p, v = self.position, self.velocity
+        if p.x < self.radius:
+            p = Vec2(self.radius, p.y)
+            v = Vec2(abs(v.x), v.y)
+        elif p.x > self.world_w - self.radius:
+            p = Vec2(self.world_w - self.radius, p.y)
+            v = Vec2(-abs(v.x), v.y)
+        if p.y < self.radius:
+            p = Vec2(p.x, self.radius)
+            v = Vec2(v.x, abs(v.y))
+        elif p.y > self.world_h - self.radius:
+            p = Vec2(p.x, self.world_h - self.radius)
+            v = Vec2(v.x, -abs(v.y))
+        
+        self.position, self.velocity = resolve_penetrations(self.position, self.velocity, self.radius, obstacles)
 
     def clear_line_of_sight(self, observer: Vec2, obstacles: tuple[Obstacle, ...]) -> bool:
         """True if no obstacle disk intersects the segment observer -> target center."""

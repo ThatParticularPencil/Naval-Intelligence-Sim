@@ -1,58 +1,104 @@
 from __future__ import annotations
 
-import math
+import math as m
 import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Tuple
 
-from interfaces.autonomy import MissionContext, NavigationPolicy
-from utils.config import SimulationConfig
-from utils.obstacle_avoidance import integrate_surface_step, resolve_penetrations
-from utils.waypoint_nav import Waypoint
+# from interfaces.autonomy import MissionContext, NavigationPolicy
+from entities.obstacle import Obstacle
+from utils import SimulationConfig
+from utils.obstacle_avoidance import avoid, resolve_penetrations
+from utils.waypoint_nav import Waypoint 
 from utils.vec2 import Vec2
-
-if TYPE_CHECKING:
-    from entities.obstacle import Obstacle
 
 
 @dataclass
 class Vessel:
     """Autonomous platform: same waypoint + ray-avoidance kinematics as targets."""
 
+    id: str
     position: Vec2
     velocity: Vec2
-    heading_rad: float
-    max_speed: float
-    sensor_radius: float
-    waypoint: Waypoint = field(repr=False)
-    navigation: NavigationPolicy = field(repr=False)
-    _rng: random.Random = field(default_factory=random.Random, repr=False, compare=False)
+    heading: float #radians
+    radius: float
+    world_w: float
+    world_h: float
+    cruise_speed: float # unused for now
+    waypoint: Waypoint 
 
-    def step(
+    max_accel: float = 2 #pixels per frame^2
+    max_turn: float = m.pi/12
+
+    def nav_vector(
+        self,
+        cfg: SimulationConfig,
+        obstacles: tuple[Obstacle, ...],
+    ) -> tuple[float,float]: #vector contains acceleration and change in heading
+        """
+        Only change will be dv and dh
+        acceleration and heading
+        three rays
+        """
+
+        avoid_vec = avoid(self.position,
+              self.velocity,
+              self.radius,
+              obstacles,
+              cfg,)
+        
+        if avoid_vec == (0,0):
+            #turn
+            direction = self.waypoint.pos - self.position
+            if direction.length() < 1e-6:
+                desired_heading = self.heading
+            else:
+                desired_heading = m.atan2(direction.y, direction.x)
+            heading_error = desired_heading - self.heading
+            # Normalize to [-pi, pi]
+            while heading_error > m.pi:
+                heading_error -= 2 * m.pi
+            while heading_error < -m.pi:
+                heading_error += 2 * m.pi
+            dh = cfg.p_turn * heading_error
+            dh = max(-cfg.max_turn, min(cfg.max_turn, dh))
+
+            #accel
+            position_error = direction.length()
+            dv = min(cfg.max_accel, position_error/100 * cfg.p_accel)
+            return dv,dh
+        else:
+            return avoid_vec 
+
+    def step_physics(
         self,
         dt: float,
-        ctx: MissionContext,
         cfg: SimulationConfig,
-        obstacles: Tuple["Obstacle", ...],
+        obstacles: tuple[Obstacle, ...],
     ) -> None:
-        self.waypoint.tick(cfg)
-        pos, vel, hdg = integrate_surface_step(
-            self.position,
-            self.velocity,
-            self.heading_rad,
-            self.waypoint.pos,
-            self.max_speed,
-            cfg.vessel_collision_radius,
-            obstacles,
-            cfg,
-            dt,
-        )
-        self.position, self.velocity, self.heading_rad = pos, vel, hdg
-        if self.velocity.length() > 0.05:
-            self.heading_rad = math.atan2(self.velocity.y, self.velocity.x)
+        dv, dh = self.nav_vector(cfg, obstacles)
 
-    def wrap_or_clamp(self, w: float, h: float) -> None:
-        m = 12.0
-        x = min(max(self.position.x, m), w - m)
-        y = min(max(self.position.y, m), h - m)
-        self.position = Vec2(x, y)
+        new_speed = self.velocity.length() + dv
+        new_speed = min(max(new_speed,cfg.vessel_speed_min), cfg.vessel_speed_max)
+        
+        self.velocity = Vec2(new_speed, 0).rotate_rad(self.heading)*(1-cfg.velocity_decay) + (self.velocity * cfg.velocity_decay)
+        self.position += self.velocity * dt
+        self.heading += dh
+
+        p, v = self.position, self.velocity
+        if p.x < self.radius:
+            p = Vec2(self.radius, p.y)
+            v = Vec2(abs(v.x), v.y)
+        elif p.x > self.world_w - self.radius:
+            p = Vec2(self.world_w - self.radius, p.y)
+            v = Vec2(-abs(v.x), v.y)
+        if p.y < self.radius:
+            p = Vec2(p.x, self.radius)
+            v = Vec2(v.x, abs(v.y))
+        elif p.y > self.world_h - self.radius:
+            p = Vec2(p.x, self.world_h - self.radius)
+            v = Vec2(v.x, -abs(v.y))
+
+        self.position, self.velocity = resolve_penetrations(self.position, self.velocity, self.radius, obstacles)
+
+
