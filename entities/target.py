@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import math
+import math as m
 import random
 from dataclasses import dataclass, field
+from turtle import position
 
 from entities.obstacle import Obstacle
 from utils.obstacle_avoidance import integrate_with_obstacle_avoidance, resolve_penetrations
-from utils.waypoint_nav import WaypointNav
+from utils.waypoint_nav import Waypoint 
 from utils.vec2 import Vec2
 
 
@@ -19,15 +20,41 @@ class Target:
     id: str
     position: Vec2
     velocity: Vec2
+    heading: float #radians
     radius: float
     world_w: float
     world_h: float
     cruise_speed: float
-    waypoint_nav: WaypointNav = field(repr=False)
+    waypoint: Waypoint 
+
+    max_accel: float = 2 #pixels per frame^2
+    max_turn: float = m.pi/12
 
     # Occlusion state: when hidden_until > sim_time, sensors cannot see this target
     hidden_until: float = 0.0
     _rng: random.Random = field(default_factory=random.Random, repr=False, compare=False)
+
+    def nav_vector(
+        self,
+        sim_time: float,
+        cfg,
+        obstacles: tuple[Obstacle, ...],
+    ) -> Vec2: #vector contains acceleration and change in heading
+        """
+        Only change will be dv and dh
+        acceleration and heading
+        three rays
+        """
+        
+        #turn
+        heading_error: float = m.radians(self.position.angle_to((self.waypoint.pos - self.position))) - self.heading
+        dh: float = cfg.p_turn * heading_error
+        dh = max(-cfg.max_turn, min(cfg.max_turn, dh))
+
+        #accel
+        dv = cfg.max_accel
+
+
 
     def step_physics(
         self,
@@ -36,58 +63,17 @@ class Target:
         cfg,
         obstacles: tuple[Obstacle, ...],
     ) -> None:
+        """
+        Only change will be dv and dh
+        acceleration and heading
+        three rays
+        """
 
-        """Advance motion; avoid obstacles; bounce on rectangular bounds."""
-        cmd = self.waypoint_nav.desired_velocity(
-            self.position,
-            sim_time,
-            cfg,
-            obstacles,
-            self.cruise_speed,
-            self.radius,
-        )
-        p, v = integrate_with_obstacle_avoidance(
-            self.position,
-            cmd,
-            self.radius,
-            obstacles,
-            dt,
-            lookahead=cfg.obstacle_avoid_lookahead,
-            repulsion=cfg.obstacle_avoid_repulsion,
-        )
 
-        cruise = self.cruise_speed
-        if cruise > 1e-6:
-            nv = v.length()
-            if nv > 1e-9:
-                v = v * (cruise / nv)
 
-        if p.x < self.radius:
-            p = Vec2(self.radius, p.y)
-            v = Vec2(abs(v.x), v.y)
-        elif p.x > self.world_w - self.radius:
-            p = Vec2(self.world_w - self.radius, p.y)
-            v = Vec2(-abs(v.x), v.y)
 
-        if p.y < self.radius:
-            p = Vec2(p.x, self.radius)
-            v = Vec2(v.x, abs(v.y))
-        elif p.y > self.world_h - self.radius:
-            p = Vec2(p.x, self.world_h - self.radius)
-            v = Vec2(v.x, -abs(v.y))
 
-        p, v = resolve_penetrations(p, v, self.radius, obstacles)
 
-        self.position = p
-        self.velocity = v
-
-        # Optional dropout while otherwise visible (handled in visibility check)
-        if sim_time >= self.hidden_until:
-            # Probability scales with dt for time-scale invariance
-            p_drop = 1.0 - math.exp(-cfg.occlusion_dropout_per_s * dt)
-            if self._rng.random() < p_drop:
-                span = self._rng.uniform(cfg.occlusion_min_hidden_s, cfg.occlusion_max_hidden_s)
-                self.hidden_until = sim_time + span
 
     def is_temporarily_hidden(self, sim_time: float) -> bool:
         return sim_time < self.hidden_until

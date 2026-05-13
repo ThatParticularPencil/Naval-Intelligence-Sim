@@ -5,6 +5,58 @@ import math
 from utils.vec2 import Vec2
 
 
+import math
+
+def ray_circle_intersection_distance(
+    origin: Vec2,
+    direction: Vec2,
+    center: Vec2,
+    radius: float,
+) -> float:
+    L = direction.length()
+    if L < 1e-12:  # Adjusted for float32/64 stability
+        return math.inf
+    
+    d = direction / L  # Normalized direction
+    oc = origin - center
+    b = oc.dot(d)
+    c = oc.dot(oc) - radius**2
+    disc = b**2 - c
+
+    if disc < 0:
+        return math.inf
+    
+    sqrt_disc = math.sqrt(disc)
+    t0 = -b - sqrt_disc
+    t1 = -b + sqrt_disc
+
+    # t0 is the entry point, t1 is the exit point
+    # prefer t0 if it's in front of us
+    if t0 > 0:
+        t_hit = t0
+    elif t1 > 0:
+        # This handles the case where the 'origin' is actually INSIDE the circle
+        t_hit = t1
+    else:
+        return math.inf
+
+    # if t_hit is greater than the original direction length, it's not a hit.
+    if t_hit > L:
+        return math.inf
+        
+    return t_hit
+def ray_object_intersection_distance(origin: Vec2, direction: Vec2, obj: object) -> float:
+    """
+    Same as :func:`ray_circle_intersection_distance` for circle-like ``obj`` with
+    ``center`` (:class:`~utils.vec2.Vec2`) and ``radius`` (numeric).
+    """
+    center = getattr(obj, "center", None)
+    radius = getattr(obj, "radius", None)
+    if center is None or radius is None:
+        return math.inf
+    return ray_circle_intersection_distance(origin, direction, center, float(radius))
+
+
 def ray_circle_intersect(origin: Vec2, direction: Vec2, center: Vec2, radius: float) -> bool:
     """
     Return True if the ray from `origin` along `direction` hits the open disk
@@ -12,24 +64,7 @@ def ray_circle_intersect(origin: Vec2, direction: Vec2, center: Vec2, radius: fl
 
     Used for line-of-sight occlusion: obstacles between boat and target block sensing.
     """
-    d = direction.normalized()
-    oc = origin - center
-    b = oc.dot(d)
-    c = oc.dot(oc) - radius * radius
-    # No real roots -> miss
-    disc = b * b - c
-    if disc < 0.0:
-        return False
-    sqrt_disc = math.sqrt(max(0.0, disc))
-    t0 = -b - sqrt_disc
-    t1 = -b + sqrt_disc
-    # We care about intersection in forward ray direction
-    t_hit = None
-    if t0 > 1e-6:
-        t_hit = t0
-    elif t1 > 1e-6:
-        t_hit = t1
-    return t_hit is not None
+    return math.isfinite(ray_circle_intersection_distance(origin, direction, center, radius))
 
 
 def segment_circle_intersect(a: Vec2, b: Vec2, center: Vec2, radius: float) -> bool:
