@@ -1,14 +1,18 @@
 """
-Kinematic obstacle avoidance for circular agents vs circular obstacles.
-
-Uses a short lookahead repulsion plus iterative penetration resolution and
-velocity reflection — no full path planner; suitable for smooth sandbox motion.
+Only change will be ddv and dh
+acceleration and heading
+three rays
+- front ray slows down
+- right and left rays push heading
 """
 
 from __future__ import annotations
 
+import math as m
 from typing import TYPE_CHECKING, Tuple
-
+from utils.geometry import ray_object_intersection_distance as roid
+from utils import vec2
+from utils.config import SimulationConfig
 from utils.vec2 import Vec2
 
 if TYPE_CHECKING:
@@ -24,7 +28,6 @@ def resolve_penetrations(
     resolve_padding: float = 2.0,
     max_resolve_iters: int = 8,
 ) -> Tuple[Vec2, Vec2]:
-    """Push ``position`` outside obstacle disks; reflect inward ``velocity`` across contact normals."""
     if not obstacles:
         return position, velocity
     p = position
@@ -41,49 +44,56 @@ def resolve_penetrations(
             p = o.center + n * r_sum
             vn = vel2.dot(n)
             if vn < 0.0:
-                vel2 = vel2 - n * (2.0 * vn)
+                vel2 = vel2 - n * vn
             moved = True
         if not moved:
             break
     return p, vel2
 
-
-def integrate_with_obstacle_avoidance(
+def avoid(
     position: Vec2,
     velocity: Vec2,
     agent_radius: float,
-    obstacles: Tuple["Obstacle", ...],
-    dt: float,
-    *,
-    lookahead: float,
-    repulsion: float,
-    resolve_padding: float = 2.0,
-    max_resolve_iters: int = 8,
-) -> Tuple[Vec2, Vec2]:
-    """
-    Advance (position, velocity) by dt while steering clear of obstacle disks.
+    obstacles: Tuple["Obstacle", ...], cfg: SimulationConfig,
+) -> tuple[float, float]: # Returns (ddv, dh)
+    
+    if not obstacles or velocity.length() < 0.1:
+        return 0.0, 0.0
 
-    ``repulsion`` scales a corrective acceleration (world units / s² flavor)
-    built from clearance inside ``lookahead`` beyond (obstacle.radius + agent_radius).
-    """
-    if not obstacles or dt <= 0.0:
-        return position + velocity * dt, velocity
+    # 1. Setup Rays (using your config for length and spread)
+    heading_vec:Vec2 = velocity.normalize()
+    ray_dist:float = cfg.ray_length
+    side_angle:float = m.pi / 4        # 45 degrees spread
+    
+    rays = {
+        "front": heading_vec * ray_dist,
+        "left":  heading_vec.rotate_rad(-side_angle) * ray_dist * 0.7,
+        "right": heading_vec.rotate_rad(side_angle) * ray_dist * 0.7
+    }
 
-    rep = Vec2(0.0, 0.0)
+    # 2. Check Intersections
+    # Store the closest distance for each ray (initialize to ray_dist)
+    hits = {key: ray_dist for key in rays}
+    
     for o in obstacles:
-        delta = position - o.center
-        dist = delta.length()
-        r_contact = o.radius + agent_radius
-        if dist < 1e-9:
-            delta = Vec2(resolve_padding * 4.0, 0.0)
-            dist = delta.length()
-        n = delta * (1.0 / dist)
-        clearance = dist - r_contact
-        if clearance < lookahead:
-            t = max(0.0, min(1.0, (lookahead - clearance) / max(lookahead, 1e-6)))
-            rep = rep + n * (repulsion * t * t)
+        for key, ray_vec in rays.items():
+            dist:float = roid(position, ray_vec, o)
+            if dist != m.inf:
+                hits[key] = min(hits[key], dist)
 
-    vel2 = velocity + rep * dt
-    p = position + vel2 * dt
+    dv = 0.0
+    dh = 0.0
+    
+    # Front ray: Proportional braking
+    if hits["front"] <= ray_dist:
+        braking_force = 1.0 - (hits["front"] / cfg.p_accel*ray_dist)
+        dv = -cfg.max_accel * braking_force 
 
-    return resolve_penetrations(p, vel2, agent_radius, obstacles, resolve_padding=resolve_padding, max_resolve_iters=max_resolve_iters)
+    # Side rays: Push heading away from obstacle
+    side = hits["left"] - hits["right"]
+    side_error = hits["right"] if side<0 else hits["left"]
+    
+    steer_weight = side_error / ray_dist
+    dh = steer_weight * cfg.max_turn
+
+    return dv, dh   

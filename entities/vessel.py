@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Tuple
 
 from interfaces.autonomy import MissionContext, NavigationPolicy
 from utils.config import SimulationConfig
-from utils.obstacle_avoidance import integrate_with_obstacle_avoidance
-from utils.waypoint_nav import WaypointNav
+from utils.obstacle_avoidance import integrate_surface_step, resolve_penetrations
+from utils.waypoint_nav import Waypoint
 from utils.vec2 import Vec2
 
 if TYPE_CHECKING:
@@ -17,16 +17,14 @@ if TYPE_CHECKING:
 
 @dataclass
 class Vessel:
-    """
-    Autonomous platform with kinematic state
-    """
+    """Autonomous platform: same waypoint + ray-avoidance kinematics as targets."""
 
     position: Vec2
     velocity: Vec2
     heading_rad: float
     max_speed: float
     sensor_radius: float
-    waypoint_nav: WaypointNav = field(repr=False)
+    waypoint: Waypoint = field(repr=False)
     navigation: NavigationPolicy = field(repr=False)
     _rng: random.Random = field(default_factory=random.Random, repr=False, compare=False)
 
@@ -37,34 +35,23 @@ class Vessel:
         cfg: SimulationConfig,
         obstacles: Tuple["Obstacle", ...],
     ) -> None:
-        desired = self.waypoint_nav.desired_velocity(
+        self.waypoint.tick(cfg)
+        pos, vel, hdg = integrate_surface_step(
             self.position,
-            ctx.sim_time_s,
-            cfg,
-            obstacles,
+            self.velocity,
+            self.heading_rad,
+            self.waypoint.pos,
             self.max_speed,
             cfg.vessel_collision_radius,
-        )
-        # Small noise on top of waypoint seek (keeps heading readout from freezing)
-        n = Vec2(self._rng.gauss(0.0, 1.0), self._rng.gauss(0.0, 1.0)) * cfg.vessel_station_keeping_noise
-        cmd = desired + n
-        speed = cmd.length()
-        if speed > self.max_speed and speed > 1e-9:
-            cmd = cmd * (self.max_speed / speed)
-        self.position, self.velocity = integrate_with_obstacle_avoidance(
-            self.position,
-            cmd,
-            cfg.vessel_collision_radius,
             obstacles,
+            cfg,
             dt,
-            lookahead=cfg.obstacle_avoid_lookahead,
-            repulsion=cfg.obstacle_avoid_repulsion,
         )
+        self.position, self.velocity, self.heading_rad = pos, vel, hdg
         if self.velocity.length() > 0.05:
             self.heading_rad = math.atan2(self.velocity.y, self.velocity.x)
 
     def wrap_or_clamp(self, w: float, h: float) -> None:
-        """Keep vessel inside map (soft clamp)."""
         m = 12.0
         x = min(max(self.position.x, m), w - m)
         y = min(max(self.position.y, m), h - m)

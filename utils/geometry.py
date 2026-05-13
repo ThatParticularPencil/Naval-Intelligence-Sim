@@ -5,8 +5,6 @@ import math
 from utils.vec2 import Vec2
 
 
-import math
-
 def ray_circle_intersection_distance(
     origin: Vec2,
     direction: Vec2,
@@ -14,7 +12,7 @@ def ray_circle_intersection_distance(
     radius: float,
 ) -> float:
     L = direction.length()
-    if L < 1e-12:  # Adjusted for float32/64 stability
+    if L < 1e-12:  
         return math.inf
     
     d = direction / L  # Normalized direction

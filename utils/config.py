@@ -11,7 +11,7 @@ class SimulationConfig:
     world_width: float = 900.0
     world_height: float = 900.0
 
-    # Random waypoint legs (seconds) for vessel + targets
+    # Random waypoint legs: life_time counts simulation ticks (per dt step), not wall seconds
     nav_grid_margin: int = 20
     nav_duration_min: int = 5 * 60
     nav_duration_max: int = 15 * 60
@@ -26,6 +26,7 @@ class SimulationConfig:
     p_accel: float = 1.1
     max_turn: float = m.pi/12
     max_accel: float = 2 #pixels per frame^2
+    velocity_decal: float = .1
     ray_length: float = 100
 
 

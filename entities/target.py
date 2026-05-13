@@ -3,10 +3,9 @@ from __future__ import annotations
 import math as m
 import random
 from dataclasses import dataclass, field
-from turtle import position
 
 from entities.obstacle import Obstacle
-from utils.obstacle_avoidance import integrate_with_obstacle_avoidance, resolve_penetrations
+from utils.obstacle_avoidance import avoid, resolve_penetrations
 from utils.waypoint_nav import Waypoint 
 from utils.vec2 import Vec2
 
@@ -22,9 +21,7 @@ class Target:
     velocity: Vec2
     heading: float #radians
     radius: float
-    world_w: float
-    world_h: float
-    cruise_speed: float
+    cruise_speed: float # unused for now
     waypoint: Waypoint 
 
     max_accel: float = 2 #pixels per frame^2
@@ -36,44 +33,49 @@ class Target:
 
     def nav_vector(
         self,
-        sim_time: float,
         cfg,
         obstacles: tuple[Obstacle, ...],
-    ) -> Vec2: #vector contains acceleration and change in heading
+    ) -> tuple[float,float]: #vector contains acceleration and change in heading
         """
         Only change will be dv and dh
         acceleration and heading
         three rays
         """
+
+        avoid_vec = avoid(self.position,
+              self.velocity,
+              self.radius,
+              obstacles,
+              cfg,)
         
-        #turn
-        heading_error: float = m.radians(self.position.angle_to((self.waypoint.pos - self.position))) - self.heading
-        dh: float = cfg.p_turn * heading_error
-        dh = max(-cfg.max_turn, min(cfg.max_turn, dh))
+        if avoid_vec == (0,0):
+            #turn
+            heading_error: float = m.radians(self.position.angle_to((self.waypoint.pos - self.position))) - self.heading
+            dh: float = cfg.p_turn * heading_error
+            dh = max(-cfg.max_turn, min(cfg.max_turn, dh))
 
-        #accel
-        dv = cfg.max_accel
+            #accel
+            dv = cfg.max_accel
+            return dv,dh
+        else:
+            return avoid_vec 
 
-
-
-    def step_physics(
+def step_physics(
         self,
         dt: float,
         sim_time: float,
         cfg,
         obstacles: tuple[Obstacle, ...],
+        max_speed: float,
     ) -> None:
-        """
-        Only change will be dv and dh
-        acceleration and heading
-        three rays
-        """
+        dv, dh = self.nav_vector(cfg, obstacles)
 
-
-
-
-
-
+        new_speed = self.velocity.length() + dv
+        new_speed = max(new_speed, max_speed)
+        
+        self.velocity = Vec2(new_speed, 0).rotate_rad(self.heading) + (self.velocity * cfg.velocity_decay)
+        self.position += self.velocity * dt
+        self.heading += dh
 
     def is_temporarily_hidden(self, sim_time: float) -> bool:
         return sim_time < self.hidden_until

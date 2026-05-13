@@ -99,7 +99,7 @@ class Dashboard:
             pygame.draw.circle(map_surf, C.TARGET_TRUE, (tx, ty), max(2, int(t.radius * sc)))
             v = t.velocity
             if v.length() > 1e-3:
-                tip = _world_to_screen(t.position + v.normalized() * 28.0, ox, oy, sc)
+                tip = _world_to_screen(t.position + v.copy().normalize() * 28.0, ox, oy, sc)
                 pygame.draw.line(map_surf, C.TARGET_TRUE, (tx, ty), tip, 1)
 
         # Predicted tracks
