@@ -22,28 +22,29 @@ class SimulationConfig:
     fixed_substeps: int = 1
 
     #navigation constants
-    p_turn: float = 0.5
-    p_accel: float = 2
+    p_turn: float = 3
+    p_accel: float = 40
     max_turn: float = m.pi/100
     max_accel: float = 10 #pixels per frame^2
-    velocity_decay: float = .9
+    velocity_decay: float = .97
+    heading_decay: float = .00
     ray_length: float = 100
 
 
     # Vessel (passive: holds station with optional micro-drift)
-    vessel_speed_max: float = 50.0
+    vessel_speed_max: float = 40.0
     vessel_speed_min: float = 10.0
     vessel_sensor_radius: float = 130.0
-    vessel_radius: float = 1.0  # disk used for obstacle avoidance / resolution
+    vessel_radius: float = 2.0  # disk used for obstacle avoidance / resolution
 
     # Targets
-    num_targets: int = 2
+    num_targets: int = 1
     target_speed_min: float = 10.0
-    target_speed_max: float = 70.0
+    target_speed_max: float = 50.0
     target_radius: float = 6.0 #
 
     # Sensor noise (std dev in meters, applied in boat frame then mapped to world)
-    observation_position_noise_std: float = 0.1 #zero for now
+    observation_position_noise_std: float = 0.1 
 
     # Tracking filter
     track_alpha_pos: float = 0.45

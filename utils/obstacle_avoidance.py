@@ -87,7 +87,8 @@ def avoid(
     # Front ray: Proportional braking
     if hits["front"] < ray_dist:
         braking_force = 1.0 - (hits["front"] / ray_dist)
-        dv = -cfg.max_accel * braking_force *.05
+        dv = -cfg.max_accel * braking_force *.1
+    else: dv = 0.0
 
     side_dist: float = 0.0
     direction: int = 0
@@ -104,7 +105,7 @@ def avoid(
         else:
             # both hit — steer toward whichever side is clearer
             if hits["front"] <= ray_dist:
-                side_dist = hits["left"]-hits["right"]
+                side_dist = hits["left"]-hits["right"] * 2
                 direction = 1
             else:
                 if hits["left"] > hits["right"]:
@@ -113,10 +114,10 @@ def avoid(
                 else:
                     side_dist = hits["right"]
                     direction = -1
-    else:
-        return dv, 0.0
+    # else:
+    #     return dv, 0.0
 
-    steer_weight = 1- (side_dist / ray_dist)
+    steer_weight = (1 - (side_dist / ray_dist)) #**2
     dh = steer_weight * cfg.max_turn * direction
 
     return dv, dh

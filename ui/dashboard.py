@@ -39,6 +39,7 @@ class Dashboard:
         self.font_small = pygame.font.SysFont("Menlo", 12) if sys.platform == "darwin" else pygame.font.SysFont("Consolas", 12)
         self._reset_button_rect = pygame.Rect(-100, -100, 1, 1)
         self._reset_button_hover = False
+        self.wave_history: list[tuple[Vec2, float]] = []  # (position, creation_time)
 
     def run(self, max_fps: float = 60.0) -> None:
         running = True
@@ -58,6 +59,16 @@ class Dashboard:
                     self._reset_button_hover = self._reset_button_rect.collidepoint(event.pos)
 
             self.engine.step()
+            # Add new waves from current target and vessel positions
+            sim_time = self.engine.world.sim_time
+            vessel = self.engine.world.vessel
+            offset = Vec2(vessel.radius * 1.2, 0).rotate_rad(vessel.heading)
+            self.wave_history.append(((vessel.position + offset).copy(), sim_time))
+            for t in self.engine.world.targets:
+                offset = Vec2(t.radius*1.2,0).rotate_rad(t.heading)
+                self.wave_history.append(((t.position + offset).copy(), sim_time))
+            # Remove old waves (older than 3 seconds)
+            self.wave_history = [(pos, t) for pos, t in self.wave_history if sim_time - t < 3.0]
             self._draw()
             pygame.display.flip()
             self.clock.tick(max_fps)
@@ -68,52 +79,57 @@ class Dashboard:
         map_surf = pygame.Surface((self.map_w, self.map_h))
         map_surf.fill(C.BG_OCEAN)
         self._draw_grid(map_surf)
+
         ox, oy = 0.0, 0.0
         sc = self.scale
         w = self.engine.world
+        cfg = w.cfg  # use instance, not the imported class
+        
+        # Wave trails from targets
+        self._draw_all_waves(map_surf, w.sim_time, ox, oy, sc)
 
         # Obstacles
         for ob in w.obstacles:
             cx, cy = _world_to_screen(ob.center, ox, oy, sc)
-            r = int(ob.radius * sc)
-            pygame.draw.circle(map_surf, C.OBSTACLE, (cx, cy), r)
-            # pygame.draw.circle(map_surf, C.OBSTACLE_EDGE, (cx, cy), r, 1)
+            pygame.draw.circle(map_surf, C.OBSTACLE, (cx, cy), int(ob.radius * sc))
 
         # Sensor footprint
         bx, by = _world_to_screen(w.vessel.position, ox, oy, sc)
         pygame.draw.circle(map_surf, C.SENSOR_RING, (bx, by), int(cfg.vessel_sensor_radius * sc), 1)
 
-        # Trails (predicted under true for contrast)
-        for tid, trail in self.engine.pred_trails.items():
+        # Trails — pred drawn first (underneath)
+        for trail in self.engine.pred_trails.values():
             pts = [_world_to_screen(p, ox, oy, sc) for p in trail]
             if len(pts) >= 2:
                 pygame.draw.lines(map_surf, C.TRAIL_PRED, False, pts, 1)
-        for tid, trail in self.engine.true_trails.items():
-            pts = [_world_to_screen(p, ox, oy, sc) for p in trail]
-            if len(pts) >= 2:
-                pygame.draw.lines(map_surf, C.TRAIL_TRUE, False, pts, 1)
+
+        # for trail in self.engine.true_trails.values():
+        #     pts = [_world_to_screen(p, ox, oy, sc) for p in trail]
+        #     if len(pts) >= 2:
+        #         pygame.draw.lines(map_surf, C.TRAIL_TRUE, False, pts, 1)
+
 
         # True targets
         for t in w.targets:
-            tx, ty = _world_to_screen(t.position, ox, oy, sc)
-            pygame.draw.circle(map_surf, C.TARGET_TRUE, (tx, ty), max(2, int(t.radius * sc)))
-            v = t.velocity
-            if v.length() > 1e-3:
-                tip = _world_to_screen(t.position + v.copy().normalize() * 28.0, ox, oy, sc)
-                pygame.draw.line(map_surf, C.TARGET_TRUE, (tx, ty), tip, 1)
+            self._draw_target_triangle(
+                map_surf, t.position, t.velocity, t.heading,
+                ox, oy, sc, C.TARGET_TRUE,
+                size=max(8.0, t.radius * 2.0),
+                outline=False,
+            )
 
         # Predicted tracks
         for tr in w.tracker.all_tracks():
             px, py = _world_to_screen(tr.estimated_position, ox, oy, sc)
             pygame.draw.rect(map_surf, C.TARGET_PRED, pygame.Rect(px - 3, py - 3, 6, 6), 1)
 
-        # Noisy observations (this frame)
+        # Noisy observations
         for obs in self.engine.last_observations:
             mx, my = _world_to_screen(obs.measured_position, ox, oy, sc)
             pygame.draw.circle(map_surf, C.OBS_NOISY, (mx, my), 3, 1)
 
-        # Vessel + heading
-        self._draw_vessel(map_surf, w.vessel.position, w.vessel.heading, ox, oy, sc)
+        # Vessel
+        self._draw_vessel(map_surf, w.vessel.position, w.vessel.heading, w.vessel.radius, ox, oy, sc)
 
         self.screen.blit(map_surf, (0, 0))
         self._draw_hud()
@@ -126,9 +142,9 @@ class Dashboard:
         for y in range(0, self.map_h, step):
             pygame.draw.line(surf, C.GRID, (0, y), (self.map_w, y), 1)
 
-    def _draw_vessel(self, surf: pygame.Surface, pos: Vec2, heading: float, ox: float, oy: float, sc: float) -> None:
+    def _draw_vessel(self, surf: pygame.Surface, pos: Vec2, heading: float, radius: float, ox: float, oy: float, sc: float) -> None:
         bx, by = _world_to_screen(pos, ox, oy, sc)
-        L = 14.0 * sc
+        L = max(8.0, radius * 3.0) * sc
         # Triangle pointing along heading
         tip = Vec2(math.cos(heading), math.sin(heading)) * L
         left = Vec2(math.cos(heading + 2.4), math.sin(heading + 2.4)) * (L * 0.55)
@@ -138,6 +154,56 @@ class Dashboard:
         p2 = (bx + int(right.x), by + int(right.y))
         pygame.draw.polygon(surf, C.VESSEL, (p0, p1, p2))
         pygame.draw.line(surf, C.VESSEL_HEADING, (bx, by), p0, 2)
+
+    def _draw_target_triangle(
+        self,
+        surf: pygame.Surface,
+        pos: Vec2,
+        vel: Vec2,
+        heading: float,
+        ox: float,
+        oy: float,
+        sc: float,
+        color: tuple[int, int, int],
+        size: float = 10.0,
+        outline: bool = False,
+    ) -> None:
+        bx, by = _world_to_screen(pos, ox, oy, sc)
+        L = size * sc
+        # heading = math.atan2(vel.y, vel.x) if vel.length() > 1e-3 else -math.pi / 2
+        tip = Vec2(math.cos(heading), math.sin(heading)) * L
+        left = Vec2(math.cos(heading + 2.4), math.sin(heading + 2.4)) * (L * 0.55)
+        right = Vec2(math.cos(heading - 2.4), math.sin(heading - 2.4)) * (L * 0.55)
+        p0 = (bx + int(tip.x), by + int(tip.y))
+        p1 = (bx + int(left.x), by + int(left.y))
+        p2 = (bx + int(right.x), by + int(right.y))
+        if outline:
+            pygame.draw.polygon(surf, color, (p0, p1, p2), 1)
+        else:
+            pygame.draw.polygon(surf, color, (p0, p1, p2))
+
+    def _draw_all_waves(self, surf: pygame.Surface, sim_time: float, ox: float, oy: float, sc: float) -> None:
+        max_age = 1.5
+        max_radius = 15.0
+        if sim_time <= .1:
+            self.wave_history.clear()
+
+        for pos, creation_time in self.wave_history:
+            age = sim_time - creation_time
+            if age < 0 or age >= max_age:
+                continue
+            alpha_factor = max(0.0, 1.0 - age / max_age)**3
+
+            if alpha_factor <= 0:
+                continue
+
+            bx, by = _world_to_screen(pos, ox, oy, sc)
+            radius = int(math.sqrt(age / max_age) * max_radius * sc) + 2
+
+            wave_surf = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+            alpha = int(alpha_factor * 255)
+            pygame.draw.circle(wave_surf, (*C.WAVE, alpha), (radius, radius), radius, 1)
+            surf.blit(wave_surf, (bx - radius, by - radius))
 
     def _draw_reset_button(self, x: int, y: int) -> int:
         """Draw Reset control; returns next y below the button."""
@@ -166,7 +232,7 @@ class Dashboard:
             f"t_sim: {w.sim_time:8.1f} s",
             f"tracks: {len(w.tracker.tracks)} / targets: {len(w.targets)}",
             "",
-            "legend: ● true  □ pred  ○ obs",
+            "legend: △ true  □ pred  ○ obs",
             "",
             "--- metrics ---",
             f"mean pos err: {m.mean_position_error():6.2f} m",

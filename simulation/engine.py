@@ -40,7 +40,7 @@ class SimulationEngine:
         w.sim_time += dt
 
         ctx = w.mission_context()
-        w.vessel.step_physics(dt, cfg, w.obstacles)
+        w.vessel.step_physics(dt, cfg, w.obstacles, tuple(w.targets))
         # w.vessel.wrap_or_clamp(cfg.world_width, cfg.world_height)
         w.vessel.position, w.vessel.velocity = resolve_penetrations(
             w.vessel.position,
@@ -84,6 +84,6 @@ class SimulationEngine:
         )
 
         for tgt in w.targets:
-            self.true_trails[tgt.id].append(tgt.position)
+            self.true_trails[tgt.id].append(tgt.position.copy())
         for tr in w.tracker.all_tracks():
             self.pred_trails[tr.contact_id].append(tr.estimated_position)

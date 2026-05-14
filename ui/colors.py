@@ -13,6 +13,7 @@ ORANGE2 = (0xE6, 0x8A, 0x5C)
 GOLD = (0xD9, 0xA0, 0x36)
 # --- map / world ---------------------------------------------------------------
 BG_OCEAN = (24, 52, 52)  # deep water from SEA_DEEP
+WAVE = (24, 70, 70)  # deep water from SEA_DEEP
 GRID = (42, 78, 76)  # low-contrast grid on ocean
 
 OBSTACLE = STONE
