@@ -4,7 +4,8 @@ https://github.com/user-attachments/assets/57832c82-b4b1-4d27-800e-7e1fdbe0bfcb
 A maritime autonomy sandbox for experimenting with multi-vessel search, sensing, tracking, and pursuit behavior; **Inspired by Saronic autonomous boats**. The sim models a small fleet of autonomous surface vessels searching for moving contacts in an obstacle-filled ocean map. They build predicted target locations from noisy observations, and algorithmically decide which vessel should pursue.
 
 I built this project to practice tools that might be useful for real-world robotics applications: simulation loops, sensor models, navigation decisions, tracking confidence, observability metrics, etc.
-## Why This Project Is Interesting
+
+## What is it
 
 This is not a graphics-first game.
 
