@@ -25,6 +25,7 @@ class SimulationEngine:
     pred_trails: Dict[str, Deque[Tuple[Vec2, float]]] = field(default_factory=lambda: defaultdict(lambda: deque()))
     last_observations: List[Observation] = field(default_factory=list)
     active_chase_assignments: Dict[str, str] = field(default_factory=dict)
+    tracking_score: float = 0.0
 
     def reset(self, seed: int | None = None) -> None:
         cfg = self.world.cfg
@@ -34,6 +35,7 @@ class SimulationEngine:
         self.pred_trails.clear()
         self.last_observations.clear()
         self.active_chase_assignments.clear()
+        self.tracking_score = 0.0
 
     def step(self) -> None:
         w = self.world
@@ -73,7 +75,8 @@ class SimulationEngine:
 
         chase_positions = self._assign_prediction_chasers()
         for vessel in w.vessels:
-            vessel.step_physics(dt, cfg, w.obstacles, chase_positions.get(vessel.id))
+            chase_list = [chase_positions[vessel.id]] if vessel.id in chase_positions else None
+            vessel.step_physics(dt, cfg, w.obstacles, chase_list)
             vessel.position, vessel.velocity = resolve_penetrations(
                 vessel.position,
                 vessel.velocity,
@@ -86,6 +89,7 @@ class SimulationEngine:
             w.true_target_ids(),
             cfg.track_maintained_conf_threshold,
         )
+        self.tracking_score += sum(track.confidence for track in w.tracker.all_tracks()) * dt
 
         for tgt in w.targets:
             self.true_trails[tgt.id].append((tgt.position.copy(), w.sim_time))

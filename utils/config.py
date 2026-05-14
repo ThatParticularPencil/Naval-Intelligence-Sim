@@ -32,14 +32,14 @@ class SimulationConfig:
 
 
     # Vessel (passive: holds station with optional micro-drift)
-    num_vessels: int = 6
-    vessel_speed_max: float = 40.0
+    num_vessels: int = 3
+    vessel_speed_max: float = 100.0
     vessel_speed_min: float = 10.0
-    vessel_sensor_radius: float = 130.0
+    vessel_sensor_radius: float = 150.0
     vessel_radius: float = 2.0  # disk used for obstacle avoidance / resolution
 
     # Targets
-    num_targets: int = 1
+    num_targets: int = 3
     target_speed_min: float = 10.0
     target_speed_max: float = 50.0
     target_radius: float = 6.0 #

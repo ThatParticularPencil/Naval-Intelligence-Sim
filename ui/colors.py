@@ -21,7 +21,7 @@ OBSTACLE_EDGE = MIST
 
 VESSEL = SAND
 VESSEL_HEADING = SEA_MINT
-SENSOR_RING = MIST
+SENSOR_RING = STONE
 
 # True contact: warm shift from STONE (still in family, distinct from teal tracks)
 # TARGET_TRUE = (0xB5, 0x8A, 0x78)
@@ -37,6 +37,8 @@ HUD_BG = (26, 30, 35)
 HUD_TEXT = MIST
 HUD_MUTED = STONE
 ALERT = (0xC4, 0x7A, 0x6E)  # warm alert; harmonizes with STONE / TARGET_TRUE
+SCORE_GLOW = (0xFF, 0xD8, 0x4A)
+SCORE = (0xFF, 0xF2, 0xA3)
 
 BUTTON_BG = (0x34, 0x5E, 0x5E)
 BUTTON_BG_HOVER = (0x42, 0x72, 0x70)

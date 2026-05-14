@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math as m
-import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Tuple
 
@@ -38,7 +37,7 @@ class Vessel:
         chase_position: Vec2 | None = None,
     ) -> tuple[float,float]: #vector contains acceleration and change in heading
         """
-        Chase an externally supplied predicted position, or coast down if idle.
+        Chase an externally supplied predicted position, or drift toward waypoint when idle.
         """
 
         avoid_vec = avoid(self.position,
@@ -47,7 +46,11 @@ class Vessel:
               obstacles,
               cfg,)
         
-        target_pos = chase_position if chase_position is not None else self.position
+        if chase_position is None:
+            self.waypoint.tick()
+            target_pos = self.waypoint.pos
+        else:
+            target_pos = chase_position
 
         #turn
         direction = target_pos - self.position
@@ -67,10 +70,7 @@ class Vessel:
 
         #accel
         position_error = direction.length()
-        if chase_position is None:
-            dv = -cfg.p_accel
-        else:
-            dv = position_error/100 * cfg.p_accel
+        dv = position_error/100 * cfg.p_accel
 
         if avoid_vec != (0,0):
             obs_const: float = 0
@@ -85,15 +85,22 @@ class Vessel:
         dt: float,
         cfg: SimulationConfig,
         obstacles: tuple[Obstacle, ...],
-        chase_position: Vec2 | None = None,
+        chase_positions: list[Vec2] | None = None,
     ) -> None:
-        dv, dh = self.nav_vector(cfg, obstacles, chase_position)
+        chase_target = (
+            min(chase_positions, key=lambda p: (p - self.position).length())
+            if chase_positions else None
+        )
 
+        dv, dh = self.nav_vector(cfg, obstacles, chase_target)
         new_speed = self.velocity.length() + dv
-        min_speed = cfg.vessel_speed_min if chase_position is not None else 0.0
+        min_speed = cfg.vessel_speed_min if chase_target is not None else cfg.vessel_speed_min * 0.35
         new_speed = min(max(new_speed, min_speed), cfg.vessel_speed_max)
-        
-        self.velocity = Vec2(new_speed, 0).rotate_rad(self.heading)*(1-cfg.velocity_decay) + (self.velocity * cfg.velocity_decay)
+
+        self.velocity = (
+            Vec2(new_speed, 0).rotate_rad(self.heading) * (1 - cfg.velocity_decay)
+            + self.velocity * cfg.velocity_decay
+        )
         self.position += self.velocity * dt
 
         dh_filtered = dh * (1 - cfg.heading_decay) + self.heading_delta * cfg.heading_decay
@@ -102,17 +109,12 @@ class Vessel:
 
         p, v = self.position, self.velocity
         if p.x < self.radius:
-            p = Vec2(self.radius, p.y)
-            v = Vec2(abs(v.x), v.y)
+            p, v = Vec2(self.radius, p.y), Vec2(abs(v.x), v.y)
         elif p.x > self.world_w - self.radius:
-            p = Vec2(self.world_w - self.radius, p.y)
-            v = Vec2(-abs(v.x), v.y)
+            p, v = Vec2(self.world_w - self.radius, p.y), Vec2(-abs(v.x), v.y)
         if p.y < self.radius:
-            p = Vec2(p.x, self.radius)
-            v = Vec2(v.x, abs(v.y))
+            p, v = Vec2(p.x, self.radius), Vec2(v.x, abs(v.y))
         elif p.y > self.world_h - self.radius:
-            p = Vec2(p.x, self.world_h - self.radius)
-            v = Vec2(v.x, -abs(v.y))
+            p, v = Vec2(p.x, self.world_h - self.radius), Vec2(v.x, -abs(v.y))
 
         self.position, self.velocity = resolve_penetrations(self.position, self.velocity, self.radius, obstacles)
-

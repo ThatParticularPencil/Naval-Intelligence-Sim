@@ -17,12 +17,32 @@ from utils.waypoint_nav import Waypoint
 from .terrain import terrain_gen
 
 
-def _spawn_targets(cfg: SimulationConfig, rng: random.Random) -> List[Target]:
+def _spawn_targets(cfg: SimulationConfig, rng: random.Random, vessels: tuple[Vessel, ...] = ()) -> List[Target]:
     targets: List[Target] = []
     margin = 40.0
+    sensor_clearance = cfg.vessel_sensor_radius + cfg.target_radius + 20.0
+
+    def unseen_position() -> Vec2:
+        best = Vec2(margin, margin)
+        best_clearance = -1.0
+        for _ in range(200):
+            candidate = Vec2(
+                rng.uniform(margin, cfg.world_width - margin),
+                rng.uniform(margin, cfg.world_height - margin),
+            )
+            if not vessels:
+                return candidate
+
+            nearest = min((candidate - vessel.position).length() for vessel in vessels)
+            if nearest > best_clearance:
+                best = candidate
+                best_clearance = nearest
+            if nearest > sensor_clearance:
+                return candidate
+        return best
+
     for i in range(cfg.num_targets):
-        x = rng.uniform(margin, cfg.world_width - margin)
-        y = rng.uniform(margin, cfg.world_height - margin)
+        pos = unseen_position()
         speed = rng.uniform(cfg.target_speed_min, cfg.target_speed_max)
         ang = rng.uniform(0.0, 6.28318)
         heading0 = float(ang)
@@ -34,7 +54,7 @@ def _spawn_targets(cfg: SimulationConfig, rng: random.Random) -> List[Target]:
         targets.append(
             Target(
                 id=tid,
-                position=Vec2(x, y),
+                position=pos,
                 velocity=v,
                 heading=heading0,
                 radius=cfg.target_radius,
@@ -108,7 +128,7 @@ class WorldState:
             cfg=cfg,
             sim_time=0.0,
             vessels=vessels,
-            targets=_spawn_targets(cfg, rng),
+            targets=_spawn_targets(cfg, rng, tuple(vessels)),
             obstacles=tuple(_default_obstacles()),
             tracker=tracker,
             sensor=SensorModel(random.Random(rng.randint(0, 2**30))),

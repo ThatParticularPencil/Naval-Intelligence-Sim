@@ -37,6 +37,7 @@ class Dashboard:
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont("Menlo", 13) if sys.platform == "darwin" else pygame.font.SysFont("Consolas", 14)
         self.font_small = pygame.font.SysFont("Menlo", 12) if sys.platform == "darwin" else pygame.font.SysFont("Consolas", 12)
+        self.font_score = pygame.font.SysFont("Menlo", 30, bold=True) if sys.platform == "darwin" else pygame.font.SysFont("Consolas", 30, bold=True)
         self._reset_button_rect = pygame.Rect(-100, -100, 1, 1)
         self._reset_button_hover = False
         self.wave_history: list[tuple[Vec2, float]] = []  # (position, creation_time)
@@ -187,7 +188,7 @@ class Dashboard:
             pygame.draw.polygon(surf, color, (p0, p1, p2))
 
     def _draw_all_waves(self, surf: pygame.Surface, sim_time: float, ox: float, oy: float, sc: float) -> None:
-        max_age = 1.5
+        max_age = 2.5
         max_radius = 15.0
         if sim_time <= .1:
             self.wave_history.clear()
@@ -269,9 +270,43 @@ class Dashboard:
             row = f"{tr.contact_id}  c={tr.confidence:.2f}  Δt={age:.2f}s  {chaser}"
             self.screen.blit(self.font_small.render(row, True, C.HUD_TEXT), (x0, y))
             y += 15
-            if y > self.win_h - 40:
+            if y > self.win_h - 120:
                 self.screen.blit(self.font_small.render("…", True, C.HUD_MUTED), (x0, y))
                 break
 
+        self._draw_score_panel(x0)
+
         hint = self.font_small.render("[R] or Reset   [ESC] quit", True, C.HUD_MUTED)
         self.screen.blit(hint, (x0, self.win_h - 22))
+
+    def _draw_score_panel(self, x: int) -> None:
+        w = self.engine.world
+        tracked_ids = {
+            track.contact_id
+            for track in w.tracker.all_tracks()
+            if track.confidence >= w.cfg.track_maintained_conf_threshold
+        }
+        all_targets_tracked = bool(w.targets) and w.true_target_ids().issubset(tracked_ids)
+
+        panel = pygame.Rect(x, self.win_h - 104, self.hud_w - 20, 70)
+        pulse = (math.sin(w.sim_time * 7.0) + 1.0) * 0.5 if all_targets_tracked else 0.0
+        border = C.SCORE_GLOW if all_targets_tracked and pulse > 0.35 else C.SCORE
+        width = 2 + int(pulse * 3)
+
+        if all_targets_tracked:
+            glow = pygame.Surface((panel.width + 12, panel.height + 12), pygame.SRCALPHA)
+            alpha = 45 + int(pulse * 70)
+            pygame.draw.rect(glow, (*C.SCORE_GLOW, alpha), glow.get_rect(), border_radius=8)
+            self.screen.blit(glow, (panel.x - 6, panel.y - 6))
+
+        pygame.draw.rect(self.screen, C.HUD_BG, panel, border_radius=6)
+        pygame.draw.rect(self.screen, border, panel, width, border_radius=6)
+
+        label = self.font_small.render("TRACKING SCORE", True, C.HUD_MUTED)
+        score = self.font_score.render(f"{self.engine.tracking_score:07.1f}", True, C.SCORE)
+        self.screen.blit(label, (panel.x + 10, panel.y + 8))
+        self.screen.blit(score, (panel.x + 10, panel.y + 26))
+
+        if all_targets_tracked:
+            bonus = self.font_small.render("ALL TARGETS TRACKED", True, C.SCORE_GLOW)
+            self.screen.blit(bonus, (panel.right - bonus.get_width() - 10, panel.y + 10))
