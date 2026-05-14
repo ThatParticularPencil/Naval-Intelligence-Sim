@@ -1,34 +1,29 @@
 # Naval Intelligence Sim
+https://github.com/user-attachments/assets/57832c82-b4b1-4d27-800e-7e1fdbe0bfcb
 
-A maritime autonomy sandbox for experimenting with multi-vessel search, sensing, tracking, and pursuit behavior. The sim models a small fleet of autonomous surface vessels looking for moving contacts in an obstacle-filled ocean map, building shared predicted target locations from noisy observations, and assigning the closest vessel to pursue each prediction.
+A maritime autonomy sandbox for experimenting with multi-vessel search, sensing, tracking, and pursuit behavior; **Inspired by Saronic autonomous boats**. The sim models a small fleet of autonomous surface vessels searching for moving contacts in an obstacle-filled ocean map. They build predicted target locations from noisy observations, and algorithmically decide which vessel should pursue.
 
-I built this project to practice the kind of software that sits between autonomy algorithms and real vehicle behavior: simulation loops, sensor models, navigation decisions, tracking confidence, observability metrics, and a live operator-style dashboard.
-
+I built this project to practice tools that might be useful for real-world robotics applications: simulation loops, sensor models, navigation decisions, tracking confidence, observability metrics, etc.
 ## Why This Project Is Interesting
 
-This is not a graphics-first game. It is a small systems/autonomy testbed with inspectable modules and real-time behavior:
+This is not a graphics-first game.
 
-- **Multi-vessel coordination** — multiple vessels are active at once, but they share global predicted target tracks instead of each vessel acting on isolated knowledge.
-- **Prediction-only pursuit** — vessels do not chase ground-truth target positions. Sensor hits update global predicted markers, and only the closest available vessel chases each prediction.
-- **Noisy sensing and line of sight** — observations are range-limited, noisy, and blocked by obstacles, so tracking depends on visibility rather than omniscient state.
-- **Tracking confidence over time** — tracks gain confidence on observations, decay when stale, and feed a cumulative score representing how long the fleet has been tracking something.
-- **Real-time dashboard** — pygame renders vessels, targets, sensor rings, observations, predicted tracks, assignment state, and health/quality metrics at interactive speed.
-- **Configurable simulation parameters** — world size, vessel count, target count, sensor range, target speed, noise, and tracker behavior are centralized in `SimulationConfig`.
+- **Multi-vessel coordination** 
+- **Prediction-only pursuit** 
+- **Noisy sensing and line of sight** 
+- **Tracking confidence over time** 
+- **Real-time dashboard** 
+- **Configurable simulation parameters** — ~50 editable constants in `SimulationConfig`.
+
+vessels integrate velocity, heading, waypoint drift, obstacle avoidance, and pursuit targets inside a fixed-step simulation loop.
+A `SensorModel` turns world state into noisy observations with range and line-of-sight gating.
+`ContactTracker` maintains estimates, confidence, stale-track pruning, and metrics over time.
+All vessels can contribute observations to shared global tracks, while assignment logic decides which vessel should act.
+The HUD exposes position error, velocity error, reacquisition gaps, maintained-track fraction, current assignments, and cumulative tracking score.
+The code separates entities, tracking, simulation orchestration, autonomy interfaces, UI, geometry, and configuration.
 
 The result is a compact environment where I can change autonomy logic and immediately see the effect on fleet behavior, reacquisition time, track quality, and mission score.
 
-## Relevance To Autonomous Surface Vessel Software
-
-Saronic Technologies works on autonomous vessels where software has to connect perception, control, telemetry, and real-world constraints. This project is intentionally aligned with that kind of work:
-
-- **Navigation and control:** vessels integrate velocity, heading, waypoint drift, obstacle avoidance, and pursuit targets inside a fixed-step simulation loop.
-- **Sensor integration:** a `SensorModel` turns world state into noisy observations with range and line-of-sight gating.
-- **Tracking and data processing:** `ContactTracker` maintains estimates, confidence, stale-track pruning, and metrics over time.
-- **Distributed autonomy concepts:** all vessels can contribute observations to shared global tracks, while assignment logic decides which vessel should act.
-- **System observability:** the HUD exposes position error, velocity error, reacquisition gaps, maintained-track fraction, current assignments, and cumulative tracking score.
-- **Modular architecture:** the code separates entities, tracking, simulation orchestration, autonomy interfaces, UI, geometry, and configuration.
-
-For a Systems Software Engineer Intern role, the project demonstrates that I enjoy building the glue between autonomy concepts and running systems: state propagation, interfaces, telemetry, debugging views, and behavior that can be inspected frame by frame.
 
 ## Quick Start
 
@@ -91,9 +86,10 @@ Vessels only chase predictions, not true target positions. For each active track
 
 ### Scoring
 
-The tracking score is cumulative and never decreases. Every tick, the engine adds the current sum of track confidences multiplied by `dt`. In practice, this rewards the fleet for maintaining confident tracks over time.
+Every tick, the engine adds the current sum of track confidences multiplied by `dt`. In practice, this rewards the fleet for maintaining confident tracks over time.
+A perfect score means that the score is 3 times the sim time.
 
-When all targets are being tracked above the configured maintained-confidence threshold, the HUD score panel pulses to make that state obvious.
+When all targets are being tracked above the configured maintained-confidence threshold, the HUD score panel pulses
 
 ## Metrics Shown In The HUD
 
@@ -104,16 +100,6 @@ When all targets are being tracked above the configured maintained-confidence th
 - **Tracking score** — cumulative confidence-weighted tracking time
 - **Track assignment** — which vessel is currently chasing each contact prediction
 
-## Design Choices
-
-The implementation is intentionally lightweight. I wanted the autonomy behavior to be easy to inspect and change without hiding core logic inside a large framework.
-
-- The tracker uses an alpha-beta style correction rather than a full EKF, so the data flow stays readable.
-- The sensor model is simple but captures the important systems idea: observations are constrained by range, noise, and geometry.
-- The dashboard favors debugging and observability over visual polish.
-- Configuration is centralized so scenarios can be changed quickly.
-- Interfaces exist for future mission logic, task scoring, telemetry, prioritization, and planning.
-
 ## What I Would Build Next
 
 - Replace the alpha-beta tracker with a constant-velocity EKF.
@@ -122,24 +108,5 @@ The implementation is intentionally lightweight. I wanted the autonomy behavior 
 - Model communications latency or packet loss between vessels.
 - Add health/state reporting for vessels and sensors.
 - Add COLREGS-inspired navigation constraints.
-- Add unit tests for assignment, tracking confidence, and spawn visibility.
 - Split the dashboard from the engine so the sim can run headless in CI.
-
-## Repository Layout
-
-```text
-main.py
-requirements.txt
-entities/
-interfaces/
-simulation/
-tracking/
-ui/
-utils/
-```
-
-## What This Shows About Me
-
-This project reflects the way I like to work: make the system run, expose the state, then iterate on behavior with fast feedback. I am comfortable moving between simulation logic, autonomy interfaces, noisy sensor data, metrics, and UI instrumentation. I also enjoy the practical debugging loop of seeing an issue in the running system, tracing it through the code, and tightening the architecture until the behavior matches the mission intent.
-
-That is the kind of work I am excited to do on real autonomous maritime systems.
+ 
