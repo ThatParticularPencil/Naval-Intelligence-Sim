@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, List
+from typing import Deque, Dict, List, Tuple
 
 from simulation.metrics import TrackingMetrics
 from simulation.world import WorldState
@@ -21,9 +21,10 @@ class SimulationEngine:
 
     world: WorldState
     metrics: TrackingMetrics = field(default_factory=TrackingMetrics)
-    true_trails: Dict[str, Deque[Vec2]] = field(default_factory=lambda: defaultdict(lambda: deque(maxlen=120)))
-    pred_trails: Dict[str, Deque[Vec2]] = field(default_factory=lambda: defaultdict(lambda: deque(maxlen=120)))
+    true_trails: Dict[str, Deque[Tuple[Vec2, float]]] = field(default_factory=lambda: defaultdict(lambda: deque()))
+    pred_trails: Dict[str, Deque[Tuple[Vec2, float]]] = field(default_factory=lambda: defaultdict(lambda: deque()))
     last_observations: List[Observation] = field(default_factory=list)
+    active_chase_assignments: Dict[str, str] = field(default_factory=dict)
 
     def reset(self, seed: int | None = None) -> None:
         cfg = self.world.cfg
@@ -32,6 +33,7 @@ class SimulationEngine:
         self.true_trails.clear()
         self.pred_trails.clear()
         self.last_observations.clear()
+        self.active_chase_assignments.clear()
 
     def step(self) -> None:
         w = self.world
@@ -39,43 +41,45 @@ class SimulationEngine:
         dt = cfg.dt
         w.sim_time += dt
 
-        ctx = w.mission_context()
-        w.vessel.step_physics(dt, cfg, w.obstacles, tuple(w.targets))
-        # w.vessel.wrap_or_clamp(cfg.world_width, cfg.world_height)
-        w.vessel.position, w.vessel.velocity = resolve_penetrations(
-            w.vessel.position,
-            w.vessel.velocity,
-            cfg.vessel_radius,
-            w.obstacles,
-        )
-
         for t in w.targets:
             t.step_physics(dt, cfg, w.obstacles)
 
         w.tracker.predict(dt, w.sim_time)
 
         self.last_observations.clear()
-        for tgt in w.targets:
-            obs = w.sensor.observe(
-                w.vessel,
-                tgt,
-                w.sim_time,
-                cfg.observation_position_noise_std,
-                w.obstacles,
-            )
-            if obs is not None:
-                w.tracker.update(obs)
-                self.last_observations.append(obs)
-                self.metrics.on_observation(
+        # All vessels observe all targets
+        for vessel in w.vessels:
+            for tgt in w.targets:
+                obs = w.sensor.observe(
+                    vessel,
+                    tgt,
                     w.sim_time,
-                    tgt.id,
-                    tgt.position,
-                    tgt.velocity,
-                    w.tracker.all_tracks(),
-                    cfg.reacquisition_gap_s,
+                    cfg.observation_position_noise_std,
+                    w.obstacles,
                 )
+                if obs is not None:
+                    w.tracker.update(obs)
+                    self.last_observations.append(obs)
+                    self.metrics.on_observation(
+                        w.sim_time,
+                        tgt.id,
+                        tgt.position,
+                        tgt.velocity,
+                        w.tracker.all_tracks(),
+                        cfg.reacquisition_gap_s,
+                    )
 
         w.tracker.prune_stale(w.sim_time)
+
+        chase_positions = self._assign_prediction_chasers()
+        for vessel in w.vessels:
+            vessel.step_physics(dt, cfg, w.obstacles, chase_positions.get(vessel.id))
+            vessel.position, vessel.velocity = resolve_penetrations(
+                vessel.position,
+                vessel.velocity,
+                cfg.vessel_radius,
+                w.obstacles,
+            )
 
         self.metrics.record_frame(
             w.tracker.all_tracks(),
@@ -84,6 +88,39 @@ class SimulationEngine:
         )
 
         for tgt in w.targets:
-            self.true_trails[tgt.id].append(tgt.position.copy())
+            self.true_trails[tgt.id].append((tgt.position.copy(), w.sim_time))
         for tr in w.tracker.all_tracks():
-            self.pred_trails[tr.contact_id].append(tr.estimated_position)
+            self.pred_trails[tr.contact_id].append((tr.estimated_position, w.sim_time))
+
+        # Remove trail entries older than 2 seconds
+        for trail in self.true_trails.values():
+            while trail and w.sim_time - trail[0][1] > 2.0:
+                trail.popleft()
+        for trail in self.pred_trails.values():
+            while trail and w.sim_time - trail[0][1] > 2.0:
+                trail.popleft()
+
+    def _assign_prediction_chasers(self) -> Dict[str, Vec2]:
+        self.active_chase_assignments.clear()
+        if not self.world.vessels:
+            return {}
+
+        chase_positions: Dict[str, Vec2] = {}
+        assigned_vessels: set[str] = set()
+        tracks = sorted(
+            self.world.tracker.all_tracks(),
+            key=lambda tr: tr.confidence,
+            reverse=True,
+        )
+        for track in tracks:
+            available = [v for v in self.world.vessels if v.id not in assigned_vessels]
+            if not available:
+                break
+            closest = min(
+                available,
+                key=lambda v: (track.estimated_position - v.position).length(),
+            )
+            assigned_vessels.add(closest.id)
+            chase_positions[closest.id] = track.estimated_position
+            self.active_chase_assignments[track.contact_id] = closest.id
+        return chase_positions

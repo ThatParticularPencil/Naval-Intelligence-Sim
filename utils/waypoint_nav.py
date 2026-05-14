@@ -26,7 +26,7 @@ class Waypoint:
 
 
     def tick(self):
-        if self.life_time == -1:
+        if self.life_time < 0:
             self.create_new()
         else:
             self.life_time -= 1

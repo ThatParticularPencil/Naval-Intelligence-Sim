@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Protocol, Sequence
 
 if TYPE_CHECKING:
     from entities.vessel import Vessel
-    from entities.target_old import Target
+    from entities.target import Target
     from tracking.contact_track import ContactTrack
     from utils.vec2 import Vec2
 
@@ -16,8 +16,14 @@ class MissionContext:
     """Snapshot passed to mission modules (expand fields as missions grow)."""
 
     sim_time_s: float
-    vessel: Vessel
+    vessels: tuple[Vessel, ...]
+    primary_vessel: Vessel | None
     tracks: tuple[ContactTrack, ...]
+
+    @property
+    def vessel(self) -> Vessel | None:
+        """Backward-compatible alias for older single-vessel autonomy code."""
+        return self.primary_vessel
 
 
 class TargetPrioritizer(ABC):

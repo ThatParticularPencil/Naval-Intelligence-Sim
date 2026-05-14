@@ -59,11 +59,11 @@ class Dashboard:
                     self._reset_button_hover = self._reset_button_rect.collidepoint(event.pos)
 
             self.engine.step()
-            # Add new waves from current target and vessel positions
+            # Add new waves from all vessels and targets
             sim_time = self.engine.world.sim_time
-            vessel = self.engine.world.vessel
-            offset = Vec2(vessel.radius * 1.2, 0).rotate_rad(vessel.heading)
-            self.wave_history.append(((vessel.position + offset).copy(), sim_time))
+            for vessel in self.engine.world.vessels:
+                offset = Vec2(vessel.radius * 1.2, 0).rotate_rad(vessel.heading)
+                self.wave_history.append(((vessel.position + offset).copy(), sim_time))
             for t in self.engine.world.targets:
                 offset = Vec2(t.radius*1.2,0).rotate_rad(t.heading)
                 self.wave_history.append(((t.position + offset).copy(), sim_time))
@@ -93,18 +93,19 @@ class Dashboard:
             cx, cy = _world_to_screen(ob.center, ox, oy, sc)
             pygame.draw.circle(map_surf, C.OBSTACLE, (cx, cy), int(ob.radius * sc))
 
-        # Sensor footprint
-        bx, by = _world_to_screen(w.vessel.position, ox, oy, sc)
-        pygame.draw.circle(map_surf, C.SENSOR_RING, (bx, by), int(cfg.vessel_sensor_radius * sc), 1)
+        # Sensor footprints
+        for vessel in w.vessels:
+            bx, by = _world_to_screen(vessel.position, ox, oy, sc)
+            pygame.draw.circle(map_surf, C.SENSOR_RING, (bx, by), int(cfg.vessel_sensor_radius * sc), 1)
 
         # Trails — pred drawn first (underneath)
         for trail in self.engine.pred_trails.values():
-            pts = [_world_to_screen(p, ox, oy, sc) for p in trail]
+            pts = [_world_to_screen(p, ox, oy, sc) for p, _ in trail]
             if len(pts) >= 2:
                 pygame.draw.lines(map_surf, C.TRAIL_PRED, False, pts, 1)
 
         # for trail in self.engine.true_trails.values():
-        #     pts = [_world_to_screen(p, ox, oy, sc) for p in trail]
+        #     pts = [_world_to_screen(p, ox, oy, sc) for p, _ in trail]
         #     if len(pts) >= 2:
         #         pygame.draw.lines(map_surf, C.TRAIL_TRUE, False, pts, 1)
 
@@ -118,18 +119,21 @@ class Dashboard:
                 outline=False,
             )
 
-        # Predicted tracks
+        # Global predicted tracks
         for tr in w.tracker.all_tracks():
             px, py = _world_to_screen(tr.estimated_position, ox, oy, sc)
-            pygame.draw.rect(map_surf, C.TARGET_PRED, pygame.Rect(px - 3, py - 3, 6, 6), 1)
+            pygame.draw.rect(map_surf, C.TARGET_PRED, pygame.Rect(px - 4, py - 4, 8, 8), 1)
+            pygame.draw.line(map_surf, C.TARGET_PRED, (px - 6, py), (px + 6, py), 1)
+            pygame.draw.line(map_surf, C.TARGET_PRED, (px, py - 6), (px, py + 6), 1)
 
         # Noisy observations
         for obs in self.engine.last_observations:
             mx, my = _world_to_screen(obs.measured_position, ox, oy, sc)
             pygame.draw.circle(map_surf, C.OBS_NOISY, (mx, my), 3, 1)
 
-        # Vessel
-        self._draw_vessel(map_surf, w.vessel.position, w.vessel.heading, w.vessel.radius, ox, oy, sc)
+        # All vessels + heading
+        for vessel in w.vessels:
+            self._draw_vessel(map_surf, vessel.position, vessel.heading, vessel.radius, ox, oy, sc)
 
         self.screen.blit(map_surf, (0, 0))
         self._draw_hud()
@@ -228,11 +232,14 @@ class Dashboard:
         y += 16
         y = self._draw_reset_button(x0, y)
 
+        vessel_speeds = [v.velocity.length() for v in w.vessels]
+        avg_vessel_speed = sum(vessel_speeds) / max(1, len(vessel_speeds))
+
         lines: list[str] = [
             f"t_sim: {w.sim_time:8.1f} s",
             f"tracks: {len(w.tracker.tracks)} / targets: {len(w.targets)}",
             "",
-            "legend: △ true  □ pred  ○ obs",
+            "legend: △ true  ⊞ pred  ○ obs",
             "",
             "--- metrics ---",
             f"mean pos err: {m.mean_position_error():6.2f} m",
@@ -240,8 +247,9 @@ class Dashboard:
             f"mean reacq gap: {m.mean_reacquisition_s():5.2f} s",
             f"avg maintained: {m.mean_maintained_fraction()*100:5.1f}%",
             "",
-            "--- vessel ---",
-            f"speed: {w.vessel.velocity.length():5.2f} m/s",
+            "--- vessels ---",
+            f"count: {len(w.vessels)}",
+            f"avg speed: {avg_vessel_speed:5.2f} m/s",
             f"sensor R: {cfg.vessel_sensor_radius:.0f} m",
             "",
             "--- tracks ---",
@@ -257,7 +265,8 @@ class Dashboard:
         tracks = sorted(w.tracker.all_tracks(), key=lambda t: t.contact_id)
         for tr in tracks:
             age = tr.seconds_since_observation(w.sim_time)
-            row = f"{tr.contact_id}  c={tr.confidence:.2f}  Δt={age:.2f}s"
+            chaser = self.engine.active_chase_assignments.get(tr.contact_id, "--")
+            row = f"{tr.contact_id}  c={tr.confidence:.2f}  Δt={age:.2f}s  {chaser}"
             self.screen.blit(self.font_small.render(row, True, C.HUD_TEXT), (x0, y))
             y += 15
             if y > self.win_h - 40:

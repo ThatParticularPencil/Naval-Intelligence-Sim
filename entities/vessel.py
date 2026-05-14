@@ -35,10 +35,10 @@ class Vessel:
         self,
         cfg: SimulationConfig,
         obstacles: tuple[Obstacle, ...],
-        targets: tuple = (),
+        chase_position: Vec2 | None = None,
     ) -> tuple[float,float]: #vector contains acceleration and change in heading
         """
-        Chase the nearest target, or hold position if no targets.
+        Chase an externally supplied predicted position, or coast down if idle.
         """
 
         avoid_vec = avoid(self.position,
@@ -47,14 +47,8 @@ class Vessel:
               obstacles,
               cfg,)
         
-        # Find nearest target
-        target_pos = None
-        if targets:
-            nearest = min(targets, key=lambda t: (t.position - self.position).length())
-            target_pos = nearest.position
-        else:
-            target_pos = self.position  # hold position if no targets
-        
+        target_pos = chase_position if chase_position is not None else self.position
+
         #turn
         direction = target_pos - self.position
         if direction.length() < 1e-6:
@@ -73,7 +67,10 @@ class Vessel:
 
         #accel
         position_error = direction.length()
-        dv = position_error/100 * cfg.p_accel
+        if chase_position is None:
+            dv = -cfg.p_accel
+        else:
+            dv = position_error/100 * cfg.p_accel
 
         if avoid_vec != (0,0):
             obs_const: float = 0
@@ -88,12 +85,13 @@ class Vessel:
         dt: float,
         cfg: SimulationConfig,
         obstacles: tuple[Obstacle, ...],
-        targets: tuple = (),
+        chase_position: Vec2 | None = None,
     ) -> None:
-        dv, dh = self.nav_vector(cfg, obstacles, targets)
+        dv, dh = self.nav_vector(cfg, obstacles, chase_position)
 
         new_speed = self.velocity.length() + dv
-        new_speed = min(max(new_speed,cfg.vessel_speed_min), cfg.vessel_speed_max)
+        min_speed = cfg.vessel_speed_min if chase_position is not None else 0.0
+        new_speed = min(max(new_speed, min_speed), cfg.vessel_speed_max)
         
         self.velocity = Vec2(new_speed, 0).rotate_rad(self.heading)*(1-cfg.velocity_decay) + (self.velocity * cfg.velocity_decay)
         self.position += self.velocity * dt
@@ -117,5 +115,4 @@ class Vessel:
             v = Vec2(v.x, -abs(v.y))
 
         self.position, self.velocity = resolve_penetrations(self.position, self.velocity, self.radius, obstacles)
-
 

@@ -32,6 +32,7 @@ class SimulationConfig:
 
 
     # Vessel (passive: holds station with optional micro-drift)
+    num_vessels: int = 6
     vessel_speed_max: float = 40.0
     vessel_speed_min: float = 10.0
     vessel_sensor_radius: float = 130.0
@@ -62,4 +63,3 @@ class SimulationConfig:
     # max_cluster_size: int = 10
     obstacle_radius: int = 50
     size_variation: float = 30
-

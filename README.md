@@ -1,6 +1,6 @@
 # Autonomous Contact Tracker
 
-A **Python** maritime autonomy **experimentation sandbox**: one passive autonomous vessel, multiple moving contacts, rocky obstacles, range–bearing–style sensing with noise, and an internal **multi-contact tracker** with confidence and timing metadata. Visualization uses **pygame** as a **dashboard** (not a game loop focused on polish).
+A **Python** maritime autonomy **experimentation sandbox**: multiple active autonomous vessels, moving contacts, rocky obstacles, range–bearing–style sensing with noise, and an internal **multi-contact tracker** with confidence and timing metadata. Visualization uses **pygame** as a **dashboard** (not a game loop focused on polish).
 
 ## Quick start
 
@@ -25,7 +25,7 @@ python3 main.py
 | `ui/` | `Dashboard` — tactical map + HUD metrics. |
 | `main.py` | Wire config → world → engine → UI. |
 
-Data flows **one way** each tick: propagate entities → `tracker.predict` → generate `Observation`s → `tracker.update` → prune → metrics → trails for plotting.
+Data flows **one way** each tick: propagate targets → `tracker.predict` → generate fleet `Observation`s → `tracker.update` → assign the closest vessel to each global prediction → propagate vessels → prune → metrics → trails for plotting.
 
 ## Tracking approach
 
@@ -37,11 +37,13 @@ Each known contact id maps to a `ContactTrack` with:
 
 This is intentionally **lightweight and inspectable**; swap the internals of `ContactTracker` for an EKF/UKF, particle filter, or track-oriented MHT without changing entity or UI contracts.
 
+The default fleet spawns six vessels. Any vessel can create or update the shared predicted-location marker through observation, but vessels do not chase ground truth; only the closest available vessel chases a global prediction.
+
 ## Uncertainty and noise modeling
 
 1. **Additive Gaussian position noise** in a **boat-aligned frame** (along / across line of sight with different scales) then mapped to world — simple **anisotropic** stand-in for radar/video jitter (`observation_position_noise_std` in `SimulationConfig`).
-2. **Range disk** — observations only if `distance <= vessel.sensor_radius`.
-3. **Line of sight** — segment from vessel to target must not intersect obstacle disks (`entities/target.py` + `utils/geometry.py`).
+2. **Range disks** — each vessel can observe contacts within `vessel_sensor_radius`.
+3. **Line of sight** — each vessel-to-target segment must not intersect obstacle disks (`entities/target.py` + `utils/geometry.py`).
 4. **Stochastic occlusion / drop-out** — targets may enter a hidden window (`occlusion_dropout_per_s`, `occlusion_min_hidden_s` / `occlusion_max_hidden_s`) to emulate brief sensor loss unrelated to geometry.
 
 ## Extension points (future autonomy)
@@ -55,7 +57,7 @@ Defined in `interfaces/autonomy.py`:
 - `TaskScorer` — multi-agent task allocation.
 - `TelemetrySink` — structured logs / replay bus.
 
-`MissionContext` carries `sim_time_s`, the `Vessel`, and the current `tracks` tuple — extend the dataclass as richer world snapshots are needed.
+`MissionContext` carries `sim_time_s`, the active `vessels` tuple, a backward-compatible `primary_vessel`, and the current `tracks` tuple — extend the dataclass as richer world snapshots are needed.
 
 **Suggested integration:** construct a small `AutonomyStack` in `simulation/engine.py` that holds optional instances and calls `navigation.desired_velocity`, `mission.step`, etc., after building `MissionContext` each tick — keep the passive demo by default.
 
@@ -69,7 +71,7 @@ Defined in `interfaces/autonomy.py`:
 
 - Replace alpha–beta with **CV-EKF** and explicit measurement Jacobians.
 - **Data association** when contact ids are not baked in (measurement clusters vs tracks).
-- **Multi-vessel** simulation layer + `TaskScorer` for assignment.
+- `TaskScorer`-driven assignment across the active vessel fleet.
 - **Replay** — implement `TelemetrySink` writing JSONL frames; add deterministic seed control per subsystem.
 - **COLREGS / domain constraints** in `NavigationPolicy` once pursuit is enabled.
 
